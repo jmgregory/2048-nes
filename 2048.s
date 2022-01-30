@@ -15,6 +15,13 @@ BOARD_BUFFER = $0300    ; Staging area for main board nametable
 BOARD_LEFT_X = 8        ; X coordinate of board left edge in nametable space
 BOARD_TOP_Y = 7         ; Y coordinate of board top edge in nametable space
 
+.struct TileDef
+    spriteStart     .byte   ; Index into second CHR table
+    spriteWidth     .byte   ; How many sprites wide is the number part? (1 or 2)
+    patternStart    .byte   ; Index into the first CHR table for the tile (ignoring color)
+    color           .byte   ; Which color is the tile? (0-4, where 0=>A, 1=>B, etc.)
+.endstruct
+
 .segment "HEADER"
 ; iNES header
 ; see http://wiki.nesdev.com/w/index.php/INES
@@ -32,10 +39,13 @@ BOARD_TOP_Y = 7         ; Y coordinate of board top edge in nametable space
 blitMode:       .res 1  ; 0 = no blit, 1 = horizontal, 2 = vertical
 blitCounter:    .res 1  ; Which row/col are we blitting?
 blitStartPPU:   .res 2  ; Counter address used in blitting to PPU
+
+; Used by DrawTile routine
 tileDrawX:      .res 1  ; X coordinate in board space where to start drawing tile
 tileDrawY:      .res 1  ; Y coordinate in board space where to start drawing tile
-tileStart:      .res 1  ; Index in CHR table of which tile to draw
+tilePower:      .res 1  ; Which number tile to draw (0=>1, 1=>2, 2=>4, 3=>8, etc.)
 tileRowCounter: .res 1  ; Counter used for drawing tiles
+spriteStart:    .res 1  ; Index in CHR table of the tile's number sprites
 
 .segment "STARTUP"
 
@@ -123,7 +133,7 @@ LoadAttributes:
 
 ; Draw some tiles
     lda #$00
-    sta tileStart
+    sta tilePower
     sta tileDrawX
     sta tileDrawY
     jsr DrawTile
@@ -141,13 +151,13 @@ NextTile:
     lda #$00
 :
     sta tileDrawX
-    lda tileStart
+    lda tilePower
     clc
-    adc #$10
-    sta tileStart
+    adc #$01
+    sta tilePower
     jsr DrawTile
-    lda tileStart
-    cmp #$C0
+    lda tilePower
+    cmp #13
     bne NextTile
 
 ; Set blit mode
@@ -179,7 +189,7 @@ WipeBoardBuffer:
 
 ; Draws a tile on BOARD_BUFFER
 ; tileDrawX and tileDrawY specify coordinates where to place the tile's top-left corner
-; tileStart is an index in the CHR table where the desired tile begins
+; tilePower indicates which tile to draw (0=>1, 1=>2, 2=>4, etc.)
 DrawTile:
     lda tileDrawY
     asl A
@@ -189,7 +199,12 @@ DrawTile:
     clc
     adc tileDrawX
     tax             ; X now has starting index in BOARD_BUFFER
-    ldy tileStart
+    lda tilePower
+    asl A
+    asl A
+    tay
+    lda TileDefinitions+TileDef::patternStart, Y
+    tay             ; Y now has starting index in CHR
     lda #0
     sta tileRowCounter
 DrawTileRow:
@@ -460,6 +475,23 @@ PaletteData:
     .byte CLR_BG, CLR_GRAY, CLR_WHITE, CLR_BLACK
     .byte CLR_BG, CLR_GRAY, CLR_WHITE, CLR_BLACK
     .byte CLR_BG, CLR_GRAY, CLR_WHITE, CLR_BLACK
+
+TileDefinitions:
+    ; sprite-index, sprite-width, tile-start, color
+    .byte   0, 1,  0, 0     ; 1
+    .byte   1, 1,  0, 0     ; 2
+    .byte   2, 1,  0, 0     ; 4
+    .byte   3, 1,  0, 0     ; 8
+    .byte   4, 2, 16, 0     ; 16
+    .byte   6, 2, 16, 0     ; 32
+    .byte   8, 2, 16, 0     ; 64
+    .byte  10, 2, 16, 0     ; 128
+    .byte  12, 2, 48, 0     ; 256
+    .byte  14, 2, 48, 0     ; 512
+    .byte  32, 2, 48, 0     ; 1024
+    .byte  34, 2, 48, 0     ; 2048
+    .byte  36, 2, 32, 0     ; 4096
+    .byte  38, 2, 32, 0     ; 8192
 
 .segment "VECTORS"
 .word nmi
