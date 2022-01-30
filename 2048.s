@@ -12,6 +12,8 @@ APU_STATUS    = $4015
 APU_FRAME_CTR = $4017
 
 BOARD_BUFFER = $0300    ; Staging area for main board nametable
+BOARD_LEFT_X = 8        ; X coordinate of board left edge in nametable space
+BOARD_TOP_Y = 7         ; Y coordinate of board top edge in nametable space
 
 .segment "HEADER"
 ; iNES header
@@ -27,11 +29,13 @@ BOARD_BUFFER = $0300    ; Staging area for main board nametable
 .res 5, $00              ; zero-filled
 
 .segment "ZEROPAGE"
-blitMode: .res 1        ; 0 = no blit, 1 = horizontal, 2 = vertical
-tileDrawX: .res 1       ; X coordinate in board space where to start drawing tile
-tileDrawY: .res 1       ; Y coordinate in board space where to start drawing tile
-tileStart: .res 1       ; Index in CHR table of which tile to draw
-tileRowCounter: .res 1  ; Counter used for drawing tile
+blitMode:       .res 1  ; 0 = no blit, 1 = horizontal, 2 = vertical
+blitCounter:    .res 1  ; Which row/col are we blitting?
+blitStartPPU:   .res 2  ; Counter address used in blitting to PPU
+tileDrawX:      .res 1  ; X coordinate in board space where to start drawing tile
+tileDrawY:      .res 1  ; Y coordinate in board space where to start drawing tile
+tileStart:      .res 1  ; Index in CHR table of which tile to draw
+tileRowCounter: .res 1  ; Counter used for drawing tiles
 
 .segment "STARTUP"
 
@@ -64,7 +68,7 @@ start:
 ClearMem:
     sta $00, x
     sta $100, x
-    lda #$FF    ; Board stage and sprites (0x200-0x2FF) get 0xFF
+    lda #$FF    ; Board stage and sprites (0x200-0x3FF) get 0xFF
     sta $200, x
     sta $300, x
     lda #$00
@@ -100,52 +104,15 @@ LoadPalettes:
     cpx #$20
     bne LoadPalettes
 
-; Draw some tiles
-    lda #0
-    sta tileStart
-    sta tileDrawX
-    sta tileDrawY
-    jsr DrawTile
-
-    lda #15
-    sta tileDrawX
-    lda #0
-    sta tileDrawY
-    jsr DrawTile
-
-    lda #14
-    sta tileDrawX
-    lda #4
-    sta tileDrawY
-    jsr DrawTile
-
-    lda #13
-    sta tileDrawX
-    lda #8
-    sta tileDrawY
-    jsr DrawTile
-
-    lda #0
-    sta tileDrawX
-    lda #15
-    sta tileDrawY
-    jsr DrawTile
-
-    lda #4
-    sta tileDrawX
-    lda #14
-    sta tileDrawY
-    jsr DrawTile
-
-    lda #8
-    sta tileDrawX
-    lda #13
-    sta tileDrawY
-    jsr DrawTile
-
 ; Gotta write the background attribute table, too
 ; PPU_ADDR is already at the beginning of the attribute table after the code
 ; above, so can just keep going from where we left off
+    ; Set PPU address to 0x3F00 (palettes)
+    bit PPU_STATUS  ; clear PPU address latch
+    lda #$23
+    sta PPU_ADDR
+    lda #$C0
+    sta PPU_ADDR
     ldx #$00
     lda #$00 ; Just use the same palette on all tiles
 LoadAttributes:
@@ -154,19 +121,43 @@ LoadAttributes:
     cpx #$40
     bne LoadAttributes
 
-; Set up our sprites in RAM
-    ldx #$00
-LoadSprites:
-    lda SpriteData, X
-    sta $200, X
-    inx
-    cpx #$20
-    bne LoadSprites
+; Draw some tiles
+    lda #$00
+    sta tileStart
+    sta tileDrawX
+    sta tileDrawY
+    jsr DrawTile
+
+NextTile:
+    lda tileDrawX
+    clc
+    adc #$04
+    cmp #$10
+    bne :+
+    lda tileDrawY
+    clc
+    adc #$04
+    sta tileDrawY
+    lda #$00
+:
+    sta tileDrawX
+    lda tileStart
+    clc
+    adc #$10
+    sta tileStart
+    jsr DrawTile
+    lda tileStart
+    cmp #$C0
+    bne NextTile
+
+; Set blit mode
+    lda #1
+    sta blitMode
 
 ; Enable interrupts
     cli
     ; enable NMI, use second CHAR tile set for backgrounds
-    lda #%10010000
+    lda #%10000000
     sta PPU_CTRL
     ; Enable sprites and background
     lda #%00011110
@@ -263,6 +254,57 @@ TileRowDone:
     tax
     jmp DrawTileRow
 
+Blit16:
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    lda BOARD_BUFFER, X
+    sta PPU_DATA
+    inx
+    rts
+
 nmi:
 ; Save CPU state
     pha
@@ -276,6 +318,109 @@ nmi:
     lda #$02
     sta OAM_DMA
     nop
+
+    lda blitMode
+    cmp #1
+    beq BlitHorizontal
+    cmp #2
+    beq BlitVertical
+    jmp DoneBlitting
+
+BlitVertical:
+    jmp DoneBlitting
+
+BlitHorizontal:
+    lda blitCounter
+    and #$03
+    asl A
+    asl A
+    clc
+    adc #BOARD_TOP_Y
+    tax
+    lsr A
+    lsr A
+    lsr A
+    clc
+    adc #$20
+    tay         ; Y is high byte of PPU write address
+    txa
+    asl A
+    asl A
+    asl A
+    asl A
+    asl A
+    clc
+    adc #BOARD_LEFT_X
+    sta blitStartPPU
+    sty blitStartPPU+1
+
+    lda blitCounter
+    and #$03
+    asl A
+    asl A
+    asl A
+    asl A
+    asl A
+    asl A
+    tax     ; X is index into BOARD_BUFFER
+
+    ; write first row
+    bit PPU_STATUS
+    lda blitStartPPU + 1
+    sta PPU_ADDR
+    lda blitStartPPU
+    sta PPU_ADDR
+    jsr Blit16
+
+    ; write second row
+    lda blitStartPPU
+    clc
+    adc #32
+    sta blitStartPPU
+    bcc :+
+    inc blitStartPPU + 1
+:
+    bit PPU_STATUS
+    lda blitStartPPU + 1
+    sta PPU_ADDR
+    lda blitStartPPU
+    sta PPU_ADDR
+    jsr Blit16
+
+    ; write third row
+    lda blitStartPPU
+    clc
+    adc #32
+    sta blitStartPPU
+    bcc :+
+    inc blitStartPPU + 1
+:
+    bit PPU_STATUS
+    lda blitStartPPU + 1
+    sta PPU_ADDR
+    lda blitStartPPU
+    sta PPU_ADDR
+    jsr Blit16
+
+    ; write fourth row
+    lda blitStartPPU
+    clc
+    adc #32
+    sta blitStartPPU
+    bcc :+
+    inc blitStartPPU + 1
+:
+    bit PPU_STATUS
+    lda blitStartPPU + 1
+    sta PPU_ADDR
+    lda blitStartPPU
+    sta PPU_ADDR
+    jsr Blit16
+
+    inc blitCounter
+    ; jmp DoneBlitting
+
+DoneBlitting:
 
 ; Reset PPU scroll to avoid trouble
     lda #$00
@@ -315,16 +460,6 @@ PaletteData:
     .byte CLR_BG, CLR_GRAY, CLR_WHITE, CLR_BLACK
     .byte CLR_BG, CLR_GRAY, CLR_WHITE, CLR_BLACK
     .byte CLR_BG, CLR_GRAY, CLR_WHITE, CLR_BLACK
-
-SpriteData:
-  .byte $08, $00, $00, $08
-  .byte $08, $01, $00, $10
-  .byte $10, $02, $00, $08
-  .byte $10, $03, $00, $10
-  .byte $18, $04, $00, $08
-  .byte $18, $05, $00, $10
-  .byte $20, $06, $00, $08
-  .byte $20, $07, $00, $10
 
 .segment "VECTORS"
 .word nmi
