@@ -11,6 +11,7 @@ APU_DMC       = $4010
 APU_STATUS    = $4015
 APU_FRAME_CTR = $4017
 
+SPRITE_BUFFER = $0200   ; Staging area for sprite data
 BOARD_BUFFER = $0300    ; Staging area for main board nametable
 BOARD_LEFT_X = 8        ; X coordinate of board left edge in nametable space
 BOARD_TOP_Y = 7         ; Y coordinate of board top edge in nametable space
@@ -46,6 +47,7 @@ tileDrawY:      .res 1  ; Y coordinate in board space where to start drawing til
 tilePower:      .res 1  ; Which number tile to draw (0=>1, 1=>2, 2=>4, 3=>8, etc.)
 tileRowCounter: .res 1  ; Counter used for drawing tiles
 spriteStart:    .res 1  ; Index in CHR table of the tile's number sprites
+spriteIndex:    .res 1  ; Next empty index in the SPRITE_BUFFER
 
 .segment "STARTUP"
 
@@ -166,8 +168,8 @@ NextTile:
 
 ; Enable interrupts
     cli
-    ; enable NMI, use second CHAR tile set for backgrounds
-    lda #%10000000
+    ; enable NMI, use second CHAR tile set for backgrounds, use 8x16 sprites
+    lda #%10101000
     sta PPU_CTRL
     ; Enable sprites and background
     lda #%00011110
@@ -183,6 +185,16 @@ WipeBoardBuffer:
     lda $FF     ; Last tile is empty
 :
     sta BOARD_BUFFER, x
+    inx
+    bne :-
+    rts
+
+WipeSpriteBuffer:
+    ldx $00
+    stx spriteIndex
+    lda $FF     ; Last tile is empty
+:
+    sta SPRITE_BUFFER, x
     inx
     bne :-
     rts
@@ -247,13 +259,13 @@ TileRowDone:
     adc tileRowCounter
     cmp #15
     bne :+
-    rts
+    jmp TileBGDone
 :
     inc tileRowCounter
     lda tileRowCounter
     cmp #4
     bne :+
-    rts     ; When tileRowCounter is 4, we're done
+    jmp TileBGDone     ; When tileRowCounter is 4, we're done with the backgrounds
 :
     cmp #2
     bne :+
@@ -268,6 +280,80 @@ TileRowDone:
     adc #13
     tax
     jmp DrawTileRow
+TileBGDone:
+; Left half of sprite
+    ; First byte - Y pos
+    lda tileDrawY
+    clc
+    adc #BOARD_TOP_Y
+    asl A
+    asl A
+    asl A
+    clc
+    adc #7
+    ldx spriteIndex
+    sta SPRITE_BUFFER, X
+    pha     ; store for later
+    inx
+    ; Second byte - CHR index
+    lda tilePower
+    asl A
+    asl A
+    clc
+    adc #$40
+    ora #$01    ; Make sure using second table for tall sprites
+    sta SPRITE_BUFFER, X
+    pha     ; store for later
+    inx
+    ; Third byte - attributes
+    lda #$00
+    sta SPRITE_BUFFER, X
+    inx
+    ; Fourth byte - X pos
+    lda tileDrawX
+    clc
+    adc #BOARD_LEFT_X
+    asl A
+    asl A
+    asl A
+    clc
+    adc #8
+    sta SPRITE_BUFFER, X
+    pha
+
+; Right half of sprite
+    ; Do these in reverse order since we're popping off the stack
+    txa
+    clc
+    adc #4
+    tax
+    ; Fourth byte - X pos
+    pla
+    clc
+    adc #8
+    sta SPRITE_BUFFER, X
+    dex
+    ; Third byte - attributes
+    lda #0
+    sta SPRITE_BUFFER, X
+    dex
+    ; Second byte - CHR index
+    pla
+    clc
+    adc #2
+    sta SPRITE_BUFFER, X
+    dex
+    ; First byte - Y pos
+    pla
+    sta SPRITE_BUFFER, X
+
+; Increment sprite index
+    lda spriteIndex
+    clc
+    adc #8
+    sta spriteIndex
+
+    rts
 
 Blit16:
     lda BOARD_BUFFER, X
@@ -471,10 +557,10 @@ PaletteData:
     .byte CLR_BG, CLR_TA, CLR_TB, CLR_TE
     .byte CLR_BG, CLR_TC, CLR_TD, CLR_TE
     ; Sprites
-    .byte CLR_BG, CLR_GRAY, CLR_WHITE, CLR_BLACK
-    .byte CLR_BG, CLR_GRAY, CLR_WHITE, CLR_BLACK
-    .byte CLR_BG, CLR_GRAY, CLR_WHITE, CLR_BLACK
-    .byte CLR_BG, CLR_GRAY, CLR_WHITE, CLR_BLACK
+    .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
+    .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
+    .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
+    .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
 
 TileDefinitions:
     ; sprite-index, sprite-width, tile-start, color
