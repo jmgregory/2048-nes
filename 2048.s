@@ -133,34 +133,8 @@ LoadAttributes:
     cpx #$40
     bne LoadAttributes
 
-; Draw some tiles
-    lda #$00
-    sta tilePower
-    sta tileDrawX
-    sta tileDrawY
-    jsr DrawTile
-
-NextTile:
-    lda tileDrawX
-    clc
-    adc #$04
-    cmp #$10
-    bne :+
-    lda tileDrawY
-    clc
-    adc #$04
-    sta tileDrawY
-    lda #$00
-:
-    sta tileDrawX
-    lda tilePower
-    clc
-    adc #$01
-    sta tilePower
-    jsr DrawTile
-    lda tilePower
-    cmp #13
-    bne NextTile
+    ; jsr TestDrawTileShapes
+    jsr TestDrawEdgeTiles
 
 ; Set blit mode
     lda #1
@@ -220,37 +194,51 @@ DrawTile:
     lda #0
     sta tileRowCounter
 DrawTileRow:
-    tya
-    sta BOARD_BUFFER, x
+    ; Is this row too high (outside the board?)
+    lda tileDrawY
+    clc
+    adc tileRowCounter
+    cmp #$FC
+    bcc :+
+    iny     ; Increment indices as if we drew the row
     iny
     inx
-    lda tileDrawX   ; Is this the last column?
+    inx
+    inx
+    jmp TileRowDone
+:
+    lda tileDrawX   ; Is this column outside the board?
+    cmp #$FD
+    bcs @Col1Done
+    tya
+    sta BOARD_BUFFER, x
+@Col1Done:
+    iny
+    inx
+    lda tileDrawX   ; Is this column outside the board?
+    cmp #$FF
+    bcs :+
     cmp #15
-    bne :+
-    iny
-    inx
-    inx
-    jmp TileRowDone
+    bcs @Col2Done
 :
     tya
     sta BOARD_BUFFER, x
+@Col2Done:
     inx
-    lda tileDrawX
-    cmp #14         ; Is this the next-to-last column?
-    bne :+
-    iny
-    inx
-    jmp TileRowDone
+    lda tileDrawX   ; Is this column outside the board?
+    cmp #$FE
+    bcs :+
+    cmp #14
+    bcs @Col3Done
 :
     tya
     sta BOARD_BUFFER, x
+@Col3Done:
     iny
     inx
     lda tileDrawX
-    cmp #13         ; Is this the next-next-to-last column?
-    bne :+
-    jmp TileRowDone
-:
+    cmp #13         ; Is this column outside the board?
+    bpl TileRowDone
     tya
     sta BOARD_BUFFER, x
 TileRowDone:
@@ -578,6 +566,112 @@ TileDefinitions:
     .byte  34, 2, 48, 0     ; 2048
     .byte  36, 2, 32, 0     ; 4096
     .byte  38, 2, 32, 0     ; 8192
+
+TestDrawTileShapes:
+    lda #$00
+    sta tilePower
+    sta tileDrawX
+    sta tileDrawY
+    jsr DrawTile
+@NextTile:
+    lda tileDrawX
+    clc
+    adc #$04
+    cmp #$10
+    bcc :+
+    lda tileDrawY
+    clc
+    adc #$04
+    sta tileDrawY
+    lda #$00
+:
+    sta tileDrawX
+    lda tilePower
+    clc
+    adc #$01
+    sta tilePower
+    jsr DrawTile
+    lda tilePower
+    cmp #13
+    bne @NextTile
+    rts
+
+TestDrawEdgeTiles:
+    lda #1
+    sta tilePower
+    lda #0
+    sta tileDrawX
+    lda #$FD
+    sta tileDrawY
+    jsr DrawTile
+
+    lda #4
+    sta tileDrawX
+    lda #$FE
+    sta tileDrawY
+    jsr DrawTile
+
+    lda #8
+    sta tileDrawX
+    lda #$FF
+    sta tileDrawY
+    jsr DrawTile
+
+    lda #15
+    sta tileDrawX
+    lda #0
+    sta tileDrawY
+    jsr DrawTile
+
+    lda #14
+    sta tileDrawX
+    lda #4
+    sta tileDrawY
+    jsr DrawTile
+
+    lda #13
+    sta tileDrawX
+    lda #8
+    sta tileDrawY
+    jsr DrawTile
+
+    lda #12
+    sta tileDrawX
+    lda #15
+    sta tileDrawY
+    jsr DrawTile
+
+    lda #8
+    sta tileDrawX
+    lda #14
+    sta tileDrawY
+    jsr DrawTile
+
+    lda #4
+    sta tileDrawX
+    lda #13
+    sta tileDrawY
+    jsr DrawTile
+
+    lda #$FD
+    sta tileDrawX
+    lda #12
+    sta tileDrawY
+    jsr DrawTile
+
+    lda #$FE
+    sta tileDrawX
+    lda #8
+    sta tileDrawY
+    jsr DrawTile
+
+    lda #$FF
+    sta tileDrawX
+    lda #4
+    sta tileDrawY
+    jsr DrawTile
+
+    rts
 
 .segment "VECTORS"
 .word nmi
