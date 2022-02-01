@@ -269,6 +269,17 @@ TileRowDone:
     tax
     jmp DrawTileRow
 TileBGDone:
+; Do we even need to draw the sprite?
+    lda tileDrawX
+    cmp #15
+    bpl TileSpriteDone
+    cmp #$FE
+    bmi TileSpriteDone
+    lda tileDrawY
+    cmp #15
+    bpl TileSpriteDone
+    cmp #$FE
+    bmi TileSpriteDone
 ; Left half of sprite
     ; First byte - Y pos
     lda tileDrawY
@@ -309,6 +320,12 @@ TileBGDone:
     sta SPRITE_BUFFER, X
     pha
 
+; Increment sprite index
+    lda spriteIndex
+    clc
+    adc #4
+    sta spriteIndex
+
 ; Right half of sprite
     ; Do these in reverse order since we're popping off the stack
     txa
@@ -338,9 +355,10 @@ TileBGDone:
 ; Increment sprite index
     lda spriteIndex
     clc
-    adc #8
+    adc #4
     sta spriteIndex
 
+TileSpriteDone:
     rts
 
 Blit16:
