@@ -545,7 +545,7 @@ DoneBlitting:
     rti
 
 CLR_BG = $20 ; Background color
-CLR_TA = $35 ; First tile color
+CLR_TA = $37 ; First tile color
 CLR_TB = $21 ; Second tile color
 CLR_TC = $11 ; Third tile color
 CLR_TD = $25 ; Fourth tile color
@@ -570,20 +570,20 @@ PaletteData:
 
 TileDefinitions:
     ; sprite-index, sprite-width, tile-start, color
-    .byte   0, 1,  0, 0     ; 1
-    .byte   1, 1,  0, 0     ; 2
-    .byte   2, 1,  0, 0     ; 4
-    .byte   3, 1,  0, 0     ; 8
-    .byte   4, 2, 16, 0     ; 16
-    .byte   6, 2, 16, 0     ; 32
-    .byte   8, 2, 16, 0     ; 64
-    .byte  10, 2, 16, 0     ; 128
-    .byte  12, 2, 48, 0     ; 256
-    .byte  14, 2, 48, 0     ; 512
-    .byte  32, 2, 48, 0     ; 1024
-    .byte  34, 2, 48, 0     ; 2048
-    .byte  36, 2, 32, 0     ; 4096
-    .byte  38, 2, 32, 0     ; 8192
+    .byte   0, 1, $00+$00, 0     ; 1
+    .byte   1, 1, $00+$40, 0     ; 2
+    .byte   2, 1, $00+$80, 0     ; 4
+    .byte   3, 1, $00+$00, 0     ; 8
+    .byte   4, 2, $10+$40, 0     ; 16
+    .byte   6, 2, $10+$80, 0     ; 32
+    .byte   8, 2, $10+$00, 0     ; 64
+    .byte  10, 2, $10+$40, 0     ; 128
+    .byte  12, 2, $30+$80, 0     ; 256
+    .byte  14, 2, $30+$00, 0     ; 512
+    .byte  32, 2, $30+$40, 0     ; 1024
+    .byte  34, 2, $30+$80, 0     ; 2048
+    .byte  36, 2, $20+$00, 0     ; 4096
+    .byte  38, 2, $20+$40, 0     ; 8192
 
 TestDrawTileShapes:
     lda #$00
