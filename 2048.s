@@ -17,8 +17,6 @@ BOARD_LEFT_X = 8        ; X coordinate of board left edge in nametable space
 BOARD_TOP_Y = 7         ; Y coordinate of board top edge in nametable space
 
 .struct TileDef
-    spriteStart     .byte   ; Index into second CHR table
-    spriteWidth     .byte   ; How many sprites wide is the number part? (1 or 2)
     patternStart    .byte   ; Index into the first CHR table for the tile (ignoring color)
     color           .byte   ; Which color is the tile? (0-4, where 0=>A, 1=>B, etc.)
 .endstruct
@@ -46,8 +44,10 @@ tileDrawX:      .res 1  ; X coordinate in board space where to start drawing til
 tileDrawY:      .res 1  ; Y coordinate in board space where to start drawing tile
 tilePower:      .res 1  ; Which number tile to draw (0=>1, 1=>2, 2=>4, 3=>8, etc.)
 tileRowCounter: .res 1  ; Counter used for drawing tiles
-spriteStart:    .res 1  ; Index in CHR table of the tile's number sprites
 spriteIndex:    .res 1  ; Next empty index in the SPRITE_BUFFER
+spriteX:        .res 1  ; Used in tile sprite drawing
+spriteY:        .res 1  ; Used in tile sprite drawing
+spriteCHRIndex: .res 1  ; Used in tile sprite drawing
 
 .segment "STARTUP"
 
@@ -142,8 +142,8 @@ LoadAttributes:
 
 ; Enable interrupts
     cli
-    ; enable NMI, use second CHAR tile set for backgrounds, use 8x16 sprites
-    lda #%10101000
+    ; enable NMI, use second CHAR tile set for sprites
+    lda #%10001000
     sta PPU_CTRL
     ; Enable sprites and background
     lda #%00011110
@@ -186,7 +186,6 @@ DrawTile:
     adc tileDrawX
     tax             ; X now has starting index in BOARD_BUFFER
     lda tilePower
-    asl A
     asl A
     tay
     lda TileDefinitions+TileDef::patternStart, Y
@@ -280,35 +279,88 @@ TileBGDone:
     bpl TileSpriteDone
     cmp #$FE
     bmi TileSpriteDone
-; Left half of sprite
-    ; First byte - Y pos
+
+    jsr SetUpTileSpriteVars
+
+TileSpriteTopLeft:
+    ; Do we draw this corner?
+    lda tileDrawY
+    cmp #$FF
+    bmi :+
+    lda tileDrawX
+    cmp #$FF
+    bmi TileSpriteTopRight
+    jsr WriteTileSpriteBytes
+    jmp TileSpriteTopRight
+:
+    inc spriteCHRIndex
+    jmp TileSpriteBottomLeft
+
+TileSpriteTopRight:
+    ; Increment indices
+    inc spriteCHRIndex
+    ; Do we draw this corner?
+    lda tileDrawX
+    cmp #14
+    bpl TileSpriteBottomLeft
+    lda spriteX
+    clc
+    adc #8
+    sta spriteX
+    jsr WriteTileSpriteBytes
+    ; Reset X coord
+    lda spriteX
+    sec
+    sbc #8
+    sta spriteX
+
+TileSpriteBottomLeft:
+    ; Increment indices
+    lda spriteCHRIndex
+    clc
+    adc #$0F
+    sta spriteCHRIndex
+    lda spriteY
+    clc
+    adc #8
+    sta spriteY
+    ; Do we draw this corner?
+    lda tileDrawY
+    cmp #14
+    bpl TileSpriteDone
+    lda tileDrawX
+    cmp #$FF
+    bmi TileSpriteBottomRight
+    jsr WriteTileSpriteBytes
+
+TileSpriteBottomRight:
+    ; Increment indices
+    inc spriteCHRIndex
+    lda spriteX
+    clc
+    adc #8
+    sta spriteX
+    ; Do we draw this corner?
+    lda tileDrawX
+    cmp #14
+    bpl TileSpriteDone
+    jsr WriteTileSpriteBytes
+
+TileSpriteDone:
+    rts
+
+SetUpTileSpriteVars:
+    ; Y coord
     lda tileDrawY
     clc
     adc #BOARD_TOP_Y
+    asl A       ; Multiply by 8 scanlines
     asl A
     asl A
-    asl A
-    clc
+    clc         ; Add padding inside the tile (PPU draws sprite on next line, so 8 - 1 => 7)
     adc #7
-    ldx spriteIndex
-    sta SPRITE_BUFFER, X
-    pha     ; store for later
-    inx
-    ; Second byte - CHR index
-    lda tilePower
-    asl A
-    asl A
-    clc
-    adc #$40
-    ora #$01    ; Make sure using second table for tall sprites
-    sta SPRITE_BUFFER, X
-    pha     ; store for later
-    inx
-    ; Third byte - attributes
-    lda #$00
-    sta SPRITE_BUFFER, X
-    inx
-    ; Fourth byte - X pos
+    sta spriteY
+    ; X coord
     lda tileDrawX
     clc
     adc #BOARD_LEFT_X
@@ -317,48 +369,38 @@ TileBGDone:
     asl A
     clc
     adc #8
-    sta SPRITE_BUFFER, X
-    pha
+    sta spriteX
+    ; CHR Index
+    lda tilePower
+    asl A
+    cmp #$10
+    bmi :+
+    clc
+    adc #$10
+:
+    sta spriteCHRIndex
+    rts
 
-; Increment sprite index
-    lda spriteIndex
-    clc
-    adc #4
-    sta spriteIndex
-
-; Right half of sprite
-    ; Do these in reverse order since we're popping off the stack
-    txa
-    clc
-    adc #4
-    tax
-    ; Fourth byte - X pos
-    pla
-    clc
-    adc #8
-    sta SPRITE_BUFFER, X
-    dex
-    ; Third byte - attributes
-    lda #0
-    sta SPRITE_BUFFER, X
-    dex
-    ; Second byte - CHR index
-    pla
-    clc
-    adc #2
-    sta SPRITE_BUFFER, X
-    dex
+WriteTileSpriteBytes:
     ; First byte - Y pos
-    pla
+    ldx spriteIndex
+    lda spriteY
     sta SPRITE_BUFFER, X
-
-; Increment sprite index
-    lda spriteIndex
-    clc
-    adc #4
-    sta spriteIndex
-
-TileSpriteDone:
+    inx
+    ; Second byte - CHR index
+    lda spriteCHRIndex
+    sta SPRITE_BUFFER, X
+    inx
+    ; Third byte - attributes
+    lda #$00
+    sta SPRITE_BUFFER, X
+    inx
+    ; Fourth byte - X pos
+    lda spriteX
+    sta SPRITE_BUFFER, X
+    inx
+    ; Increment sprite index
+    stx spriteIndex
     rts
 
 Blit16:
@@ -569,21 +611,21 @@ PaletteData:
     .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
 
 TileDefinitions:
-    ; sprite-index, sprite-width, tile-start, color
-    .byte   0, 1, $00+$00, 0     ; 1
-    .byte   1, 1, $00+$40, 0     ; 2
-    .byte   2, 1, $00+$80, 0     ; 4
-    .byte   3, 1, $00+$00, 0     ; 8
-    .byte   4, 2, $10+$40, 0     ; 16
-    .byte   6, 2, $10+$80, 0     ; 32
-    .byte   8, 2, $10+$00, 0     ; 64
-    .byte  10, 2, $10+$40, 0     ; 128
-    .byte  12, 2, $30+$80, 0     ; 256
-    .byte  14, 2, $30+$00, 0     ; 512
-    .byte  32, 2, $30+$40, 0     ; 1024
-    .byte  34, 2, $30+$80, 0     ; 2048
-    .byte  36, 2, $20+$00, 0     ; 4096
-    .byte  38, 2, $20+$40, 0     ; 8192
+    ; tile-start, color
+    .byte $00+$00, 0     ; 1
+    .byte $00+$40, 0     ; 2
+    .byte $00+$80, 0     ; 4
+    .byte $00+$00, 0     ; 8
+    .byte $10+$40, 0     ; 16
+    .byte $10+$80, 0     ; 32
+    .byte $10+$00, 0     ; 64
+    .byte $10+$40, 0     ; 128
+    .byte $30+$80, 0     ; 256
+    .byte $30+$00, 0     ; 512
+    .byte $30+$40, 0     ; 1024
+    .byte $30+$80, 0     ; 2048
+    .byte $20+$00, 0     ; 4096
+    .byte $20+$40, 0     ; 8192
 
 TestDrawTileShapes:
     lda #$00
