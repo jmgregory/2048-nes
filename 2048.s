@@ -738,14 +738,14 @@ DoneBlitting:
 ; NMI done
     rti
 
-CLR_BG = $20 ; Background color
+CLR_BG = $08 ; Background color
 CLR_TA = $37 ; First tile color
-CLR_TB = $21 ; Second tile color
-CLR_TC = $11 ; Third tile color
-CLR_TD = $25 ; Fourth tile color
-CLR_TE = $15 ; Fifth tile color
-CLR_WHITE = $30
-CLR_GRAY = $2D
+CLR_TB = $28 ; Third tile color
+CLR_TC = $36 ; Second tile color
+CLR_TD = $27 ; Fourth tile color
+CLR_TE = $17 ; Fifth tile color
+CLR_WHITE = $20
+CLR_GRAY = $08
 CLR_BLACK = $1D
 
 PaletteData:
@@ -768,14 +768,14 @@ TileDefinitions:
     .byte $00+$40, 1     ; 2
     .byte $00+$80, 2     ; 4
     .byte $00+$00, 3     ; 8
-    .byte $10+$40, 4     ; 16
+    .byte $00+$40, 4     ; 16
     .byte $10+$00, 0     ; 32
     .byte $10+$40, 1     ; 64
     .byte $10+$80, 2     ; 128
-    .byte $30+$00, 3     ; 256
-    .byte $30+$40, 4     ; 512
-    .byte $30+$00, 0     ; 1024
-    .byte $30+$40, 1     ; 2048
+    .byte $10+$00, 3     ; 256
+    .byte $10+$40, 4     ; 512
+    .byte $20+$00, 0     ; 1024
+    .byte $20+$40, 1     ; 2048
     .byte $20+$80, 2     ; 4096
     .byte $20+$00, 3     ; 8192
 
