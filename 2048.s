@@ -12,9 +12,11 @@ APU_STATUS    = $4015
 APU_FRAME_CTR = $4017
 
 SPRITE_BUFFER = $0200   ; Staging area for sprite data
-BOARD_BUFFER = $0300    ; Staging area for main board nametable
-BOARD_LEFT_X = 8        ; X coordinate of board left edge in nametable space
-BOARD_TOP_Y = 7         ; Y coordinate of board top edge in nametable space
+BOARD_BUFFER  = $0300   ; Staging area for main board nametable
+COLOR_BUFFER  = $0400   ; Staging area for tile colors, for attribute table calc
+ATTR_BUFFER   = $0500   ; Staging area for board attribute table
+BOARD_LEFT_X  = 8       ; X coordinate of board left edge in nametable space (must multiple of 4 for attributes to map properly)
+BOARD_TOP_Y   = 8       ; Y coordinate of board top edge in nametable space (must multiple of 4 for attributes to map properly)
 
 .struct TileDef
     patternStart    .byte   ; Index into the first CHR table for the tile (ignoring color)
@@ -44,10 +46,13 @@ tileDrawX:      .res 1  ; X coordinate in board space where to start drawing til
 tileDrawY:      .res 1  ; Y coordinate in board space where to start drawing tile
 tilePower:      .res 1  ; Which number tile to draw (0=>1, 1=>2, 2=>4, 3=>8, etc.)
 tileRowCounter: .res 1  ; Counter used for drawing tiles
+tileColor:      .res 1  ; Internal variable used for drawing tiles
 spriteIndex:    .res 1  ; Next empty index in the SPRITE_BUFFER
 spriteX:        .res 1  ; Used in tile sprite drawing
 spriteY:        .res 1  ; Used in tile sprite drawing
 spriteCHRIndex: .res 1  ; Used in tile sprite drawing
+colorLookup:    .res 1  ; Used in palette mapping
+attrIndex:      .res 1  ; Index into attr buffer, used in palette mapping
 
 .segment "STARTUP"
 
@@ -117,8 +122,6 @@ LoadPalettes:
     bne LoadPalettes
 
 ; Gotta write the background attribute table, too
-; PPU_ADDR is already at the beginning of the attribute table after the code
-; above, so can just keep going from where we left off
     ; Set PPU address to 0x3F00 (palettes)
     bit PPU_STATUS  ; clear PPU address latch
     lda #$23
@@ -133,8 +136,9 @@ LoadAttributes:
     cpx #$40
     bne LoadAttributes
 
-    ; jsr TestDrawTileShapes
-    jsr TestDrawEdgeTiles
+    jsr TestDrawTileShapes
+    ; jsr TestDrawEdgeTiles
+    jsr PaintAttributeBuffer
 
 ; Set blit mode
     lda #1
@@ -188,6 +192,8 @@ DrawTile:
     lda tilePower
     asl A
     tay
+    lda TileDefinitions+TileDef::color, Y
+    sta tileColor
     lda TileDefinitions+TileDef::patternStart, Y
     tay             ; Y now has starting index in CHR
     lda #0
@@ -210,7 +216,9 @@ DrawTileRow:
     cmp #$FD
     bcs @Col1Done
     tya
-    sta BOARD_BUFFER, x
+    sta BOARD_BUFFER, X
+    lda tileColor
+    sta COLOR_BUFFER, X
 @Col1Done:
     iny
     inx
@@ -222,6 +230,8 @@ DrawTileRow:
 :
     tya
     sta BOARD_BUFFER, x
+    lda tileColor
+    sta COLOR_BUFFER, X
 @Col2Done:
     inx
     lda tileDrawX   ; Is this column outside the board?
@@ -232,6 +242,8 @@ DrawTileRow:
 :
     tya
     sta BOARD_BUFFER, x
+    lda tileColor
+    sta COLOR_BUFFER, X
 @Col3Done:
     iny
     inx
@@ -240,6 +252,8 @@ DrawTileRow:
     bpl TileRowDone
     tya
     sta BOARD_BUFFER, x
+    lda tileColor
+    sta COLOR_BUFFER, X
 TileRowDone:
     lda tileDrawY
     clc
@@ -401,6 +415,107 @@ WriteTileSpriteBytes:
     inx
     ; Increment sprite index
     stx spriteIndex
+    rts
+
+PaintAttributeBuffer:
+    ldx $00
+    stx attrIndex
+BeginPaintQuadrant:
+    ; top left
+    lda COLOR_BUFFER, X
+    inx
+    asl A
+    asl A
+    asl A
+    ora COLOR_BUFFER, X
+    inx
+    tay
+    lda TileColorLookups, Y
+    sta colorLookup
+    and #$30
+    lsr A
+    lsr A
+    lsr A
+    lsr A
+    ldy attrIndex
+    ora ATTR_BUFFER, Y
+    sta ATTR_BUFFER, Y
+    ; top right
+    lda COLOR_BUFFER, X
+    inx
+    asl A
+    asl A
+    asl A
+    ora COLOR_BUFFER, X
+    inx
+    tay
+    lda TileColorLookups, Y
+    sta colorLookup
+    and #$30
+    lsr A
+    lsr A
+    ldy attrIndex
+    ora ATTR_BUFFER, Y
+    sta ATTR_BUFFER, Y
+    ; bottom left
+    txa
+    clc
+    adc #$1C
+    tax
+    lda COLOR_BUFFER, X
+    inx
+    asl A
+    asl A
+    asl A
+    ora COLOR_BUFFER, X
+    inx
+    tay
+    lda TileColorLookups, Y
+    sta colorLookup
+    and #$30
+    ldy attrIndex
+    ora ATTR_BUFFER, Y
+    sta ATTR_BUFFER, Y
+    ; bottom right
+    lda COLOR_BUFFER, X
+    inx
+    asl A
+    asl A
+    asl A
+    ora COLOR_BUFFER, X
+    inx
+    tay
+    lda TileColorLookups, Y
+    sta colorLookup
+    and #$30
+    asl A
+    asl A
+    ldy attrIndex
+    ora ATTR_BUFFER, Y
+    sta ATTR_BUFFER, Y
+
+    inc attrIndex
+    txa
+    sec
+    sbc #$20
+    tax
+
+    ;Check if we're done
+    lda attrIndex
+    cmp #$10
+    bpl DonePaletteMap
+    ; Check if we need to move to next row
+    and #$03
+    cmp #$00
+    bne :+
+    txa
+    clc
+    adc #$30
+    tax
+:
+    jmp BeginPaintQuadrant
+
+DonePaletteMap:
     rts
 
 Blit16:
@@ -566,10 +681,47 @@ BlitHorizontal:
     sta PPU_ADDR
     jsr Blit16
 
-    inc blitCounter
-    ; jmp DoneBlitting
+; Blit ATTR table
+; Horizontal
+    lda blitCounter
+    and #$03
+    asl A
+    asl A
+    clc
+    adc #BOARD_TOP_Y
+    asl A
+    asl A
+    asl A
+    clc
+    adc #BOARD_LEFT_X
+    lsr A
+    lsr A
+    adc #$C0
+    ldy #$23
+    bit PPU_STATUS
+    sty PPU_ADDR
+    sta PPU_ADDR
+    lda blitCounter
+    and #$03
+    asl A
+    asl A
+    tax
+    lda ATTR_BUFFER, X
+    inx
+    sta PPU_DATA
+    lda ATTR_BUFFER, X
+    inx
+    sta PPU_DATA
+    lda ATTR_BUFFER, X
+    inx
+    sta PPU_DATA
+    lda ATTR_BUFFER, X
+    inx
+    sta PPU_DATA
+    jmp DoneBlitting
 
 DoneBlitting:
+    inc blitCounter
 
 ; Reset PPU scroll to avoid trouble
     lda #$00
@@ -603,7 +755,7 @@ PaletteData:
     .byte CLR_BG, CLR_TA, CLR_TB, CLR_TC
     .byte CLR_BG, CLR_TA, CLR_TB, CLR_TD
     .byte CLR_BG, CLR_TA, CLR_TB, CLR_TE
-    .byte CLR_BG, CLR_TC, CLR_TD, CLR_TE
+    .byte CLR_BG, CLR_TD, CLR_TE, CLR_TC
     ; Sprites
     .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
     .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
@@ -611,21 +763,73 @@ PaletteData:
     .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
 
 TileDefinitions:
-    ; tile-start, color
+    ; CHR tile-start, color (0-4 => A-B)
     .byte $00+$00, 0     ; 1
-    .byte $00+$40, 0     ; 2
-    .byte $00+$80, 0     ; 4
-    .byte $00+$00, 0     ; 8
-    .byte $10+$40, 0     ; 16
-    .byte $10+$80, 0     ; 32
-    .byte $10+$00, 0     ; 64
-    .byte $10+$40, 0     ; 128
-    .byte $30+$80, 0     ; 256
-    .byte $30+$00, 0     ; 512
-    .byte $30+$40, 0     ; 1024
-    .byte $30+$80, 0     ; 2048
-    .byte $20+$00, 0     ; 4096
-    .byte $20+$40, 0     ; 8192
+    .byte $00+$40, 1     ; 2
+    .byte $00+$80, 2     ; 4
+    .byte $00+$00, 3     ; 8
+    .byte $10+$40, 4     ; 16
+    .byte $10+$00, 0     ; 32
+    .byte $10+$40, 1     ; 64
+    .byte $10+$80, 2     ; 128
+    .byte $30+$00, 3     ; 256
+    .byte $30+$40, 4     ; 512
+    .byte $30+$00, 0     ; 1024
+    .byte $30+$40, 1     ; 2048
+    .byte $20+$80, 2     ; 4096
+    .byte $20+$00, 3     ; 8192
+
+TileColorLookups:
+; Provides palette information for mapping pairs of colors correctly to the
+; attribute table.  Four palettes of three colors each can accommodate up to
+; five total colors while still allowing for each color pair combination to be
+; present in at least one palette.
+;
+; Index format:
+; 7  bit  0
+; ---- ----
+; xxLL LRRR
+; |||| |+++- Color of right (bottom) two squares (0-4 => A-E)
+; ||++-+---- Color of left (top) two squares (0-4 => A-E)
+; ++-------- Unused
+;
+; Result format:
+; 7  bit  0
+; ---- ----
+; xxPP LLRR
+; |||| ||++- Right/bottom CHR index increment, times 0x40 (0, 1, or 2)
+; |||| ++--- Left/top CHR index increment, times 0x40 (0, 1, or 2)
+; ||++------ Which palette to use (0-3)
+; ++-------- Unused
+.byte $00   ; A A
+.byte $00   ; A B
+.byte $00   ; A C
+.byte $12   ; A D
+.byte $21   ; A E
+.byte $00, $00, $00 ; Filler
+.byte $00   ; B A
+.byte $00   ; B B
+.byte $00   ; B C
+.byte $12   ; B D
+.byte $21   ; B E
+.byte $00, $00, $00 ; Filler
+.byte $00   ; C A
+.byte $00   ; C B
+.byte $00   ; C C
+.byte $32   ; C D
+.byte $31   ; C E
+.byte $00, $00, $00 ; Filler
+.byte $18   ; D A
+.byte $18   ; D B
+.byte $30   ; D C
+.byte $30   ; D D
+.byte $30   ; D E
+.byte $00, $00, $00 ; Filler
+.byte $21   ; E A
+.byte $21   ; E B
+.byte $31   ; E C
+.byte $30   ; E D
+.byte $30   ; E E
 
 TestDrawTileShapes:
     lda #$00
