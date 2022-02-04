@@ -478,7 +478,13 @@ WriteTileSpriteBytes:
     sta SPRITE_BUFFER, X
     inx
     ; Third byte - attributes
+    lda tileColor
+    bne :+
+    lda #$01    ; Second sprite palette
+    jmp @StoreThirdByte
+:
     lda #$00
+@StoreThirdByte:
     sta SPRITE_BUFFER, X
     inx
     ; Fourth byte - X pos
@@ -931,7 +937,7 @@ PaletteData:
     .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
     ; Sprites
     .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
-    .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
+    .byte CLR_BG, CLR_BLACK, CLR_GRAY, CLR_WHITE
     .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
     .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
 
