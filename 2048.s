@@ -622,6 +622,8 @@ BeginPaintQuadrant:
 DonePaletteMap:
     rts
 
+COLOR_BUMP_INCREMENT = $50  ; $10 is one row in the CHR table
+
 IncrementBoardBufferColors:
     ; Stash X and Y
     txa
@@ -642,7 +644,7 @@ IncrementBoardBufferColors:
     ; Add to existing CHR index
     lda BOARD_BUFFER, X
     clc
-    adc #$40    ; Four rows in CHR table to bump color
+    adc #COLOR_BUMP_INCREMENT
     sta BOARD_BUFFER, X
     ; Move down a row in the board buffer
     txa
@@ -652,7 +654,7 @@ IncrementBoardBufferColors:
     ; Add to this CHR index, too
     lda BOARD_BUFFER, X
     clc
-    adc #$40    ; Four rows in CHR table to bump color
+    adc #COLOR_BUMP_INCREMENT
     sta BOARD_BUFFER, X
     ; Move X to top-right corner
     txa
@@ -669,7 +671,7 @@ IncrementBoardBufferColors:
     ; Add to existing CHR index
     lda BOARD_BUFFER, X
     clc
-    adc #$40    ; Four rows in CHR table to bump color
+    adc #COLOR_BUMP_INCREMENT
     sta BOARD_BUFFER, X
     ; Move down a row in the board buffer
     txa
@@ -679,7 +681,7 @@ IncrementBoardBufferColors:
     ; Add to this CHR index, too
     lda BOARD_BUFFER, X
     clc
-    adc #$40    ; Four rows in CHR table to bump color
+    adc #COLOR_BUMP_INCREMENT
     sta BOARD_BUFFER, X
 @Done:
     ; Restore Y and X
@@ -937,18 +939,18 @@ TileDefinitions:
     ; CHR tile-start, color (0-4 => A-B)
     .byte $00+$00, 0     ; 1
     .byte $00+$00, 1     ; 2
-    .byte $00+$40, 2     ; 4
+    .byte $00+$50, 2     ; 4
     .byte $10+$00, 0     ; 8
     .byte $10+$00, 1     ; 16
-    .byte $10+$40, 2     ; 32
+    .byte $10+$50, 2     ; 32
     .byte $20+$00, 0     ; 64
     .byte $20+$00, 1     ; 128
-    .byte $20+$40, 2     ; 256
+    .byte $20+$50, 2     ; 256
     .byte $30+$00, 0     ; 512
     .byte $30+$00, 1     ; 1024
-    .byte $30+$40, 2     ; 2048
-    .byte $30+$00, 0     ; 4096
-    .byte $30+$00, 1     ; 8192
+    .byte $30+$50, 2     ; 2048
+    .byte $40+$00, 0     ; 4096
+    .byte $40+$00, 1     ; 8192
 
 TileColorLookups:
 ; Provides palette information for mapping pairs of colors correctly to the
