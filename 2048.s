@@ -519,6 +519,7 @@ BeginPaintQuadrant:
     ldy attrIndex
     ora ATTR_BUFFER, Y
     sta ATTR_BUFFER, Y
+    jsr IncrementBoardBufferColors
     ; top right
     lda COLOR_BUFFER, X
     asl A
@@ -543,6 +544,7 @@ BeginPaintQuadrant:
     ldy attrIndex
     ora ATTR_BUFFER, Y
     sta ATTR_BUFFER, Y
+    jsr IncrementBoardBufferColors
     ; bottom left
     txa
     clc
@@ -569,6 +571,7 @@ BeginPaintQuadrant:
     ldy attrIndex
     ora ATTR_BUFFER, Y
     sta ATTR_BUFFER, Y
+    jsr IncrementBoardBufferColors
     ; bottom right
     lda COLOR_BUFFER, X
     asl A
@@ -593,6 +596,7 @@ BeginPaintQuadrant:
     ldy attrIndex
     ora ATTR_BUFFER, Y
     sta ATTR_BUFFER, Y
+    jsr IncrementBoardBufferColors
 
     inc attrIndex
     txa
@@ -616,6 +620,74 @@ BeginPaintQuadrant:
     jmp BeginPaintQuadrant
 
 DonePaletteMap:
+    rts
+
+IncrementBoardBufferColors:
+    ; Stash X and Y
+    txa
+    pha
+    tya
+    pha
+    ; X to top-left corner
+    dex
+    dex
+    ; Get CHR increment factor
+    lda colorLookup
+    beq @Done
+    and #$02
+    bne :+
+    inx
+    jmp @TopRight
+:
+    ; Add to existing CHR index
+    lda BOARD_BUFFER, X
+    clc
+    adc #$40    ; Four rows in CHR table to bump color
+    sta BOARD_BUFFER, X
+    ; Move down a row in the board buffer
+    txa
+    clc
+    adc #$10
+    tax
+    ; Add to this CHR index, too
+    lda BOARD_BUFFER, X
+    clc
+    adc #$40    ; Four rows in CHR table to bump color
+    sta BOARD_BUFFER, X
+    ; Move X to top-right corner
+    txa
+    sec
+    sbc #$0F
+    tax
+@TopRight:
+    ; Get CHR increment factor
+    lda colorLookup
+    and #$01
+    bne :+
+    jmp @Done
+:
+    ; Add to existing CHR index
+    lda BOARD_BUFFER, X
+    clc
+    adc #$40    ; Four rows in CHR table to bump color
+    sta BOARD_BUFFER, X
+    ; Move down a row in the board buffer
+    txa
+    clc
+    adc #$10
+    tax
+    ; Add to this CHR index, too
+    lda BOARD_BUFFER, X
+    clc
+    adc #$40    ; Four rows in CHR table to bump color
+    sta BOARD_BUFFER, X
+@Done:
+    ; Restore Y and X
+    pla
+    tay
+    pla
+    tax
+    ; Return
     rts
 
 Blit16:
