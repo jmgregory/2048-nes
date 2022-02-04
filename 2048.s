@@ -136,8 +136,9 @@ LoadAttributes:
     cpx #$40
     bne LoadAttributes
 
-    jsr TestDrawTileShapes
+    ; jsr TestDrawTileShapes
     ; jsr TestDrawEdgeTiles
+    jsr TestColorMix1
     jsr PaintAttributeBuffer
 
 ; Set blit mode
@@ -282,6 +283,77 @@ TileRowDone:
     tax
     jmp DrawTileRow
 TileBGDone:
+
+; If there are any existing sprites under this tile, drop them off the screen
+    ldx #0
+@CheckNextSprite:
+    lda SPRITE_BUFFER, X
+    cmp #$FF
+    beq @SpriteNoCollision
+    lda tileDrawY
+    clc
+    adc #BOARD_TOP_Y
+    asl
+    asl
+    asl
+    sec
+    sbc #1
+    cmp SPRITE_BUFFER, X
+    beq @CheckSpriteX
+    clc
+    adc #8
+    cmp SPRITE_BUFFER, X
+    beq @CheckSpriteX
+    clc
+    adc #8
+    cmp SPRITE_BUFFER, X
+    beq @CheckSpriteX
+    clc
+    adc #8
+    cmp SPRITE_BUFFER, X
+    beq @CheckSpriteX
+    jmp @SpriteNoCollision
+@CheckSpriteX:
+    inx     ; Go to sprite X coord byte
+    inx
+    inx
+    lda tileDrawX
+    clc
+    adc #BOARD_LEFT_X
+    asl
+    asl
+    asl
+    cmp SPRITE_BUFFER, X
+    beq @SpriteCollision
+    clc
+    adc #8
+    cmp SPRITE_BUFFER, X
+    beq @SpriteCollision
+    clc
+    adc #8
+    cmp SPRITE_BUFFER, X
+    beq @SpriteCollision
+    clc
+    adc #8
+    cmp SPRITE_BUFFER, X
+    beq @SpriteCollision
+    jmp @SpriteNoCollision
+@SpriteCollision:
+    dex
+    dex
+    dex
+    lda #$FF
+    sta SPRITE_BUFFER, X
+@SpriteNoCollision:
+    txa
+    and #%11111100  ; Make sure we're at first byte of sprite (Y-pos)
+    tax
+    inx             ; Increment to next sprite
+    inx
+    inx
+    inx
+    bne @CheckNextSprite
+
 ; Do we even need to draw the sprite?
     lda tileDrawX
     cmp #15
@@ -933,6 +1005,66 @@ TestDrawEdgeTiles:
     sta tileDrawX
     lda #4
     sta tileDrawY
+    jsr DrawTile
+
+    rts
+
+TestColorMix1:
+    lda #0
+    sta tilePower
+    sta tileDrawX
+    sta tileDrawY
+    jsr DrawTile
+    inc tilePower
+    inc tileDrawX
+    jsr DrawTile
+    inc tilePower
+    inc tileDrawX
+    jsr DrawTile
+    inc tilePower
+    inc tileDrawX
+    jsr DrawTile
+
+    lda #0
+    sta tileDrawX
+    lda #4
+    sta tileDrawY
+    inc tilePower
+    jsr DrawTile
+    inc tilePower
+    inc tileDrawX
+    jsr DrawTile
+    inc tilePower
+    inc tileDrawX
+    jsr DrawTile
+    inc tilePower
+    inc tileDrawX
+    jsr DrawTile
+
+    lda #0
+    sta tileDrawX
+    lda #8
+    sta tileDrawY
+    inc tilePower
+    jsr DrawTile
+    inc tilePower
+    inc tileDrawX
+    jsr DrawTile
+    inc tilePower
+    inc tileDrawX
+    jsr DrawTile
+    inc tilePower
+    inc tileDrawX
+    jsr DrawTile
+
+    lda #0
+    sta tileDrawX
+    lda #12
+    sta tileDrawY
+    inc tilePower
+    jsr DrawTile
+    inc tilePower
+    inc tileDrawX
     jsr DrawTile
 
     rts
