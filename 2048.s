@@ -495,13 +495,20 @@ PaintAttributeBuffer:
 BeginPaintQuadrant:
     ; top left
     lda COLOR_BUFFER, X
-    inx
     asl A
     asl A
-    asl A
-    ora COLOR_BUFFER, X
-    inx
     tay
+    txa
+    clc
+    adc #$11
+    tax
+    tya
+    ora COLOR_BUFFER, X
+    tay
+    txa
+    sec
+    sbc #$0F
+    tax
     lda TileColorLookups, Y
     sta colorLookup
     and #$30
@@ -514,13 +521,20 @@ BeginPaintQuadrant:
     sta ATTR_BUFFER, Y
     ; top right
     lda COLOR_BUFFER, X
-    inx
     asl A
     asl A
-    asl A
-    ora COLOR_BUFFER, X
-    inx
     tay
+    txa
+    clc
+    adc #$11
+    tax
+    tya
+    ora COLOR_BUFFER, X
+    tay
+    txa
+    sec
+    sbc #$0F
+    tax
     lda TileColorLookups, Y
     sta colorLookup
     and #$30
@@ -535,13 +549,20 @@ BeginPaintQuadrant:
     adc #$1C
     tax
     lda COLOR_BUFFER, X
-    inx
     asl A
     asl A
-    asl A
-    ora COLOR_BUFFER, X
-    inx
     tay
+    txa
+    clc
+    adc #$11
+    tax
+    tya
+    ora COLOR_BUFFER, X
+    tay
+    txa
+    sec
+    sbc #$0F
+    tax
     lda TileColorLookups, Y
     sta colorLookup
     and #$30
@@ -550,13 +571,20 @@ BeginPaintQuadrant:
     sta ATTR_BUFFER, Y
     ; bottom right
     lda COLOR_BUFFER, X
-    inx
     asl A
     asl A
-    asl A
-    ora COLOR_BUFFER, X
-    inx
     tay
+    txa
+    clc
+    adc #$11
+    tax
+    tya
+    ora COLOR_BUFFER, X
+    tay
+    txa
+    sec
+    sbc #$0F
+    tax
     lda TileColorLookups, Y
     sta colorLookup
     and #$30
@@ -810,12 +838,11 @@ DoneBlitting:
 ; NMI done
     rti
 
-CLR_BG = $08 ; Background color
-CLR_TA = $37 ; First tile color
-CLR_TB = $28 ; Third tile color
-CLR_TC = $36 ; Second tile color
-CLR_TD = $27 ; Fourth tile color
-CLR_TE = $17 ; Fifth tile color
+CLR_BG = $08    ; Background color
+CLR_TA = $37    ; First tile color
+CLR_TB = $27    ; Second tile color
+CLR_TC = $17    ; Third tile color
+CLR_BLANK = $08 ; Blank slot color
 CLR_WHITE = $20
 CLR_GRAY = $08
 CLR_BLACK = $1D
@@ -824,10 +851,10 @@ PaletteData:
     ; Backgrounds
     ; Intent here is for every pair of colors to be available on at least one
     ; palette
-    .byte CLR_BG, CLR_TA, CLR_TB, CLR_TC
-    .byte CLR_BG, CLR_TA, CLR_TB, CLR_TD
-    .byte CLR_BG, CLR_TA, CLR_TB, CLR_TE
-    .byte CLR_BG, CLR_TD, CLR_TE, CLR_TC
+    .byte CLR_BG, CLR_TA, CLR_TB, CLR_BLANK
+    .byte CLR_BG, CLR_TA, CLR_TC, CLR_BLANK
+    .byte CLR_BG, CLR_TB, CLR_TC, CLR_BLANK
+    .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
     ; Sprites
     .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
     .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
@@ -837,19 +864,19 @@ PaletteData:
 TileDefinitions:
     ; CHR tile-start, color (0-4 => A-B)
     .byte $00+$00, 0     ; 1
-    .byte $00+$40, 1     ; 2
-    .byte $00+$80, 2     ; 4
-    .byte $00+$00, 3     ; 8
-    .byte $00+$40, 4     ; 16
-    .byte $10+$00, 0     ; 32
-    .byte $10+$40, 1     ; 64
-    .byte $10+$80, 2     ; 128
-    .byte $10+$00, 3     ; 256
-    .byte $10+$40, 4     ; 512
-    .byte $20+$00, 0     ; 1024
-    .byte $20+$40, 1     ; 2048
-    .byte $20+$80, 2     ; 4096
-    .byte $20+$00, 3     ; 8192
+    .byte $00+$00, 1     ; 2
+    .byte $00+$40, 2     ; 4
+    .byte $10+$00, 0     ; 8
+    .byte $10+$00, 1     ; 16
+    .byte $10+$40, 2     ; 32
+    .byte $20+$00, 0     ; 64
+    .byte $20+$00, 1     ; 128
+    .byte $20+$40, 2     ; 256
+    .byte $30+$00, 0     ; 512
+    .byte $30+$00, 1     ; 1024
+    .byte $30+$40, 2     ; 2048
+    .byte $30+$00, 0     ; 4096
+    .byte $30+$00, 1     ; 8192
 
 TileColorLookups:
 ; Provides palette information for mapping pairs of colors correctly to the
@@ -860,48 +887,31 @@ TileColorLookups:
 ; Index format:
 ; 7  bit  0
 ; ---- ----
-; xxLL LRRR
-; |||| |+++- Color of right (bottom) two squares (0-4 => A-E)
-; ||++-+---- Color of left (top) two squares (0-4 => A-E)
-; ++-------- Unused
+; xxxx LLRR
+; |||| ||++- Color of right (bottom) two squares (0-2 => A-C)
+; |||| ++--- Color of left (top) two squares (0-2 => A-C)
+; ++++------ Unused
 ;
 ; Result format:
 ; 7  bit  0
 ; ---- ----
-; xxPP LLRR
-; |||| ||++- Right/bottom CHR index increment, times 0x40 (0, 1, or 2)
-; |||| ++--- Left/top CHR index increment, times 0x40 (0, 1, or 2)
-; ||++------ Which palette to use (0-3)
+; xxPP xxLR
+; |||| |||+- Increment right/bottom CHR index by number of shapes times 16
+; |||| ||+-- Increment left/top CHR index by number of shapes times 16
+; |||| ++--- Unused
+; ||++------ Which palette to use (0-2)
 ; ++-------- Unused
 .byte $00   ; A A
-.byte $00   ; A B
-.byte $00   ; A C
-.byte $12   ; A D
-.byte $21   ; A E
-.byte $00, $00, $00 ; Filler
-.byte $00   ; B A
-.byte $00   ; B B
-.byte $00   ; B C
-.byte $12   ; B D
-.byte $21   ; B E
-.byte $00, $00, $00 ; Filler
-.byte $00   ; C A
-.byte $00   ; C B
-.byte $00   ; C C
-.byte $32   ; C D
-.byte $31   ; C E
-.byte $00, $00, $00 ; Filler
-.byte $18   ; D A
-.byte $18   ; D B
-.byte $30   ; D C
-.byte $30   ; D D
-.byte $30   ; D E
-.byte $00, $00, $00 ; Filler
-.byte $21   ; E A
-.byte $21   ; E B
-.byte $31   ; E C
-.byte $30   ; E D
-.byte $30   ; E E
+.byte $01   ; A B
+.byte $10   ; A C
+.byte $FF   ; Unused
+.byte $02   ; B A
+.byte $03   ; B B
+.byte $20   ; B C
+.byte $FF   ; Unused
+.byte $10   ; C A
+.byte $20   ; C B
+.byte $10   ; C C
 
 TestDrawTileShapes:
     lda #$00
