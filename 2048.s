@@ -136,9 +136,9 @@ LoadAttributes:
     cpx #$40
     bne LoadAttributes
 
-    ; jsr TestDrawTileShapes
+    jsr TestDrawTileShapes
     ; jsr TestDrawEdgeTiles
-    jsr TestColorMix1
+    ; jsr TestColorMix1
     jsr PaintAttributeBuffer
 
 ; Set blit mode
