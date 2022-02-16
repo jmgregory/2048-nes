@@ -15,7 +15,7 @@ SPRITE_BUFFER = $0200   ; Staging area for sprite data
 BOARD_BUFFER  = $0300   ; Staging area for main board nametable
 COLOR_BUFFER  = $0400   ; Staging area for tile colors, for attribute table calc
 ATTR_BUFFER   = $0500   ; Staging area for board attribute table
-BOARD_LEFT_X  = 8       ; X coordinate of board left edge in nametable space (must multiple of 4 for attributes to map properly)
+BOARD_LEFT_X  = 4       ; X coordinate of board left edge in nametable space (must multiple of 4 for attributes to map properly)
 BOARD_TOP_Y   = 8       ; Y coordinate of board top edge in nametable space (must multiple of 4 for attributes to map properly)
 
 .struct TileDef
@@ -53,6 +53,7 @@ spriteY:        .res 1  ; Used in tile sprite drawing
 spriteCHRIndex: .res 1  ; Used in tile sprite drawing
 colorLookup:    .res 1  ; Used in palette mapping
 attrIndex:      .res 1  ; Index into attr buffer, used in palette mapping
+blitSource:     .res 2  ; Pointer to memory location to blit from
 
 .segment "STARTUP"
 
@@ -121,21 +122,27 @@ LoadPalettes:
     cpx #$20
     bne LoadPalettes
 
-; Gotta write the background attribute table, too
-    ; Set PPU address to 0x3F00 (palettes)
+; Draw the main background
+    ; Set PPU address to 0x2000 (first nametable)
     bit PPU_STATUS  ; clear PPU address latch
-    lda #$23
+    lda #$20
     sta PPU_ADDR
-    lda #$C0
+    lda #$00
     sta PPU_ADDR
-    ldx #$00
-    lda #$00 ; Just use the same palette on all tiles
-LoadAttributes:
-    sta PPU_DATA
-    inx
-    cpx #$40
-    bne LoadAttributes
+    lda #<BackgroundPatternTable
+    sta blitSource
+    lda #>BackgroundPatternTable
+    sta blitSource + 1
+    ldy #0
+    jsr Blit256
+    inc blitSource + 1
+    jsr Blit256
+    inc blitSource + 1
+    jsr Blit256
+    inc blitSource + 1
+    jsr Blit256
 
+    jsr WipeBoardBuffer
     jsr TestDrawTileShapes
     ; jsr TestDrawEdgeTiles
     ; jsr TestColorMix1
@@ -160,10 +167,30 @@ Loop:
     jmp Loop
 
 WipeBoardBuffer:
-    ldx $00
-    lda $FF     ; Last tile is empty
+    ldx #0
+    ldy #0
+@WipeBoardRow:
+    lda BackgroundPatternTable + (BOARD_TOP_Y * 32) + BOARD_LEFT_X, X
+    sta BOARD_BUFFER, y
+    sta BOARD_BUFFER + 64, y
+    sta BOARD_BUFFER + 128, y
+    sta BOARD_BUFFER + 192, y
+    inx
+    iny
+    txa
+    and #$0F
+    bne @WipeBoardRow
+    txa
+    clc
+    adc #16
+    bcs :+
+    tax
+    jmp @WipeBoardRow
 :
-    sta BOARD_BUFFER, x
+    ldx #0
+    lda #0
+:
+    sta COLOR_BUFFER, X
     inx
     bne :-
     rts
@@ -496,7 +523,7 @@ WriteTileSpriteBytes:
     rts
 
 PaintAttributeBuffer:
-    ldx $00
+    ldx #$00
     stx attrIndex
 BeginPaintQuadrant:
     ; top left
@@ -698,55 +725,72 @@ IncrementBoardBufferColors:
     ; Return
     rts
 
+Blit256:
+    jsr Blit32
+Blit224:
+    jsr Blit32
+    jsr Blit32
+    jsr Blit32
+    jsr Blit32
+    jsr Blit32
+    jsr Blit32
+    jsr Blit32
+    rts
+
+Blit32:
+    jsr Blit16
+    jsr Blit16
+    rts
+
 Blit16:
-    lda BOARD_BUFFER, X
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
-    lda BOARD_BUFFER, X
+    iny
+    lda (blitSource), Y
     sta PPU_DATA
-    inx
+    iny
     rts
 
 nmi:
@@ -806,7 +850,12 @@ BlitHorizontal:
     asl A
     asl A
     asl A
-    tax     ; X is index into BOARD_BUFFER
+    tay     ; Y is index into BOARD_BUFFER
+
+    lda #<BOARD_BUFFER
+    sta blitSource
+    lda #>BOARD_BUFFER
+    sta blitSource+1
 
     ; write first row
     bit PPU_STATUS
@@ -918,23 +967,25 @@ DoneBlitting:
 ; NMI done
     rti
 
-CLR_BG = $08    ; Background color
+CLR_BG = $3d    ; Background color
 CLR_TA = $37    ; First tile color
 CLR_TB = $27    ; Second tile color
 CLR_TC = $17    ; Third tile color
 CLR_BLANK = $08 ; Blank slot color
 CLR_WHITE = $20
-CLR_GRAY = $08
 CLR_BLACK = $1D
+CLR_LIGHTBLUE = $11
+CLR_DARKBLUE = $02
+CLR_GRAY = $3d
 
 PaletteData:
     ; Backgrounds
     ; Intent here is for every pair of colors to be available on at least one
     ; palette
-    .byte CLR_BG, CLR_TA, CLR_TB, CLR_BLANK
-    .byte CLR_BG, CLR_TA, CLR_TC, CLR_BLANK
-    .byte CLR_BG, CLR_TB, CLR_TC, CLR_BLANK
-    .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
+    .byte CLR_BG, CLR_LIGHTBLUE, CLR_DARKBLUE, CLR_WHITE
+    .byte CLR_BG, CLR_TA, CLR_TB, CLR_WHITE
+    .byte CLR_BG, CLR_TA, CLR_TC, CLR_WHITE
+    .byte CLR_BG, CLR_TB, CLR_TC, CLR_WHITE
     ; Sprites
     .byte CLR_BG, CLR_WHITE, CLR_GRAY, CLR_BLACK
     .byte CLR_BG, CLR_BLACK, CLR_GRAY, CLR_WHITE
@@ -960,9 +1011,7 @@ TileDefinitions:
 
 TileColorLookups:
 ; Provides palette information for mapping pairs of colors correctly to the
-; attribute table.  Four palettes of three colors each can accommodate up to
-; five total colors while still allowing for each color pair combination to be
-; present in at least one palette.
+; attribute table.
 ;
 ; Index format:
 ; 7  bit  0
@@ -979,19 +1028,22 @@ TileColorLookups:
 ; |||| |||+- Increment right/bottom CHR index by number of shapes times 16
 ; |||| ||+-- Increment left/top CHR index by number of shapes times 16
 ; |||| ++--- Unused
-; ||++------ Which palette to use (0-2)
+; ||++------ Which palette to use (0-3)
 ; ++-------- Unused
-.byte $00   ; A A
-.byte $01   ; A B
-.byte $10   ; A C
+.byte $10   ; A A
+.byte $11   ; A B
+.byte $20   ; A C
 .byte $FF   ; Unused
-.byte $02   ; B A
-.byte $03   ; B B
-.byte $20   ; B C
+.byte $12   ; B A
+.byte $13   ; B B
+.byte $30   ; B C
 .byte $FF   ; Unused
-.byte $10   ; C A
-.byte $20   ; C B
-.byte $10   ; C C
+.byte $20   ; C A
+.byte $30   ; C B
+.byte $20   ; C C
+
+BackgroundPatternTable:
+.incbin "board-background.nam"
 
 TestDrawTileShapes:
     lda #$00
