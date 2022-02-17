@@ -3,3 +3,4 @@
 *.deb
 *.dbg
 *.db
+obj/
