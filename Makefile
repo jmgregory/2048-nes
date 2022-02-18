@@ -13,8 +13,8 @@ OBJS := 2048.o \
 		tests.o \
 		tile-lookups.o \
 
-2048.nes: $(addprefix obj/,$(OBJS))
-	ld65 -o $@ $^ -t nes --dbgfile 2048.nes.db
+2048.nes: $(addprefix obj/,$(OBJS)) nrom.cfg
+	ld65 -o $@ $(addprefix obj/,$(OBJS)) -C nrom.cfg --dbgfile 2048.nes.db
 
 obj/%.o: src/%.s
 	@mkdir -p obj
