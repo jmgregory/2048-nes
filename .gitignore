@@ -4,3 +4,4 @@
 *.dbg
 *.db
 obj/
+*.prg

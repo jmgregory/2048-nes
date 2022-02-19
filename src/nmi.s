@@ -4,7 +4,7 @@
 
 .segment "ZEROPAGE"
 blitStartPPU:   .res 2  ; Counter address used in blitting to PPU
-blitMode:       .res 1  ; 0 = no blit, 1 = horizontal, 2 = vertical
+blitMode:       .res 1  ; see BLIT_* enum in defs.s
 blitCounter:    .res 1  ; Which row/col are we blitting?
 .export blitMode
 
@@ -28,9 +28,9 @@ nmi:
     nop
 
     lda blitMode
-    cmp #1
+    cmp #BLIT_HORIZONTAL
     beq BlitHorizontal
-    cmp #2
+    cmp #BLIT_VERTICAL
     beq BlitVertical
     jmp DoneBlitting
 

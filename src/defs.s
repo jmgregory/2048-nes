@@ -18,3 +18,23 @@ ATTR_BUFFER   = $0500   ; Staging area for board attribute table
 
 BOARD_LEFT_X  = 4       ; X coordinate of board left edge in nametable space (must multiple of 4 for attributes to map properly)
 BOARD_TOP_Y   = 8       ; Y coordinate of board top edge in nametable space (must multiple of 4 for attributes to map properly)
+
+.enum
+    BLIT_NONE
+    BLIT_HORIZONTAL
+    BLIT_VERTICAL
+.endenum
+
+.enum
+    DIR_UP
+    DIR_DOWN
+    DIR_LEFT
+    DIR_RIGHT
+.endenum
+
+.struct Tile
+    power       .byte
+    xpos        .byte
+    ypos        .byte
+    velocity    .byte   ; High nibble = x velocity, low nibble = y velocity (2's complement)
+.endstruct
