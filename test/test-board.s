@@ -17,7 +17,7 @@ _main:
     jsr TestFindTilesMultiple
     jsr TestFindTilesOrderReversed
     jsr TestFindTilesIgnoreIntermediatePositions
-    printfw1 "All tests in '%s' passed!", testFileName
+    printf "All tests in '%s' passed!", #testFileName
     lda #0
     jmp exit
 
@@ -301,14 +301,14 @@ DumpTiles:
     ldx #0
 DumpNextTile:
     lda tiles+Tile::xpos, x
-    printfb2 "Tile %0d xpos = %d", tempY, tempA
+    printf "Tile %0d xpos = %d", tempY, tempA
     lda tiles+Tile::ypos, x
-    printfb2 "Tile %0d ypos = %d", tempY, tempA
+    printf "Tile %0d ypos = %d", tempY, tempA
     lda tiles+Tile::power, x
-    printfb2 "Tile %0d power = %d", tempY, tempA
+    printf "Tile %0d power = %d", tempY, tempA
     lda tiles+Tile::velocity, x
-    printfb2 "Tile %0d velocity = %d", tempY, tempA
-    printf0 ""
+    printf "Tile %0d velocity = %d", tempY, tempA
+    printf ""
 .repeat .sizeof(Tile)
     inx
 .endrepeat
@@ -317,8 +317,8 @@ DumpNextTile:
     beq :+
     jmp DumpNextTile
 :
-    printfb1 "tileIndex1 = %d", tileIndex1
-    printfb1 "tileIndex2 = %d", tileIndex2
-    printfb1 "tileIndex3 = %d", tileIndex3
-    printfb1 "tileIndex4 = %d", tileIndex4
+    printf "tileIndex1 = %d", tileIndex1
+    printf "tileIndex2 = %d", tileIndex2
+    printf "tileIndex3 = %d", tileIndex3
+    printf "tileIndex4 = %d", tileIndex4
     rts
