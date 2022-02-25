@@ -33,8 +33,8 @@ BOARD_TOP_Y   = 8       ; Y coordinate of board top edge in nametable space (mus
 .endenum
 
 .struct Tile
-    power       .byte
-    xpos        .byte
-    ypos        .byte
-    velocity    .byte   ; High nibble = x velocity, low nibble = y velocity (2's complement)
+    powers      .byte   ; Low nibble = current power; High nibble = "new" power after slide completes
+    xpos        .byte   ; x position in board space, -3 to 15
+    ypos        .byte   ; y position in board space, -3 to 15
+    velocity    .byte   ; per-frame velocity along the current slide axis
 .endstruct

@@ -2,6 +2,8 @@
 .include "helpers.s"
 
 .import FindTileRow, GetTilePosOnNonSlideAxis, GetTilePosOnSlideAxis
+.import SetTileDisappears, SetTilePowerConstant, SetTilePowerIncrease
+.import CalculateTileTransitions
 .importzp tileRow, tiles, slideDir, tileIndex1, tileIndex2, tileIndex3, tileIndex4
 
 .segment "STARTUP"
@@ -17,6 +19,22 @@ _main:
     jsr TestFindTilesMultiple
     jsr TestFindTilesOrderReversed
     jsr TestFindTilesIgnoreIntermediatePositions
+    jsr TestSetTileDisappears
+    jsr TestSetTilePowerConstant
+    jsr TestSetTilePowerIncrease
+    jsr TestCalculateTileTransitionsEmpty
+    jsr TestCalculateTileTransitionsSingleFirstTile
+    jsr TestCalculateTileTransitionsSingleSlidingTile
+    jsr TestCalculateTileTransitionsMultipleSlidingTilesSync
+    jsr TestCalculateTileTransitionsMultipleSlidingTilesGap
+    jsr TestCalculateTileTransitionsFullSlateNoMerge
+    jsr TestCalculateTileTransitionsSimpleMerge
+    jsr TestCalculateTileTransitionsSlidingMerge
+    jsr TestCalculateTileTransitionsGapMerge
+    jsr TestCalculateTileTransitionsDoubleMerge
+    jsr TestCalculateTileTransitionsMiddleMerge
+    jsr TestCalculateTileTransitionsMegaMerge
+    jsr TestCalculateTileTransitionsMergeAndSlide
     printf "All tests in '%s' passed!", #testFileName
     lda #0
     jmp exit
@@ -72,7 +90,7 @@ TestFindTilesSingle:
     lda #0
     sta tiles+Tile::xpos
     sta tiles+Tile::ypos
-    sta tiles+Tile::power
+    sta tiles+Tile::powers
     sta tileRow
     lda #DIR_LEFT
     sta slideDir
@@ -92,8 +110,8 @@ TestFindTilesSingle:
     expectA #0, "tiles[tileIndex1].x"
     lda tiles+Tile::ypos, x
     expectA #0, "tiles[tileIndex1].y"
-    lda tiles+Tile::power, x
-    expectA #0, "tiles[tileIndex1].power"
+    lda tiles+Tile::powers, x
+    expectA #0, "tiles[tileIndex1].powers"
 
     rts
 
@@ -114,7 +132,33 @@ TestFindTilesSingle:
     lda yp
     sta tiles+Tile::ypos, x
     lda pow
-    sta tiles+Tile::power, x
+    sta tiles+Tile::powers, x
+.endmacro
+
+.macro setTileIndexSlot tileIndex, slot
+    .local @SetSlot
+    lda #slot
+    cmp #$FF
+    beq @SetSlot
+    clc
+.repeat (.sizeof(Tile) - 1)
+    adc #slot
+.endrepeat
+@SetSlot:
+    sta tileIndex
+.endmacro
+
+.macro setSlideDir dir
+    lda #dir
+    sta slideDir
+.endmacro
+
+.macro checkTileTransition tileIndex, pows, vel
+    ldx tileIndex
+    lda tiles + Tile::powers, X
+    expectA pows, .concat("Updated tile ", .string(tileIndex), " powers")
+    lda tiles + Tile::velocity, X
+    expectA vel, .concat("Updated tile ", .string(tileIndex), " velocity")
 .endmacro
 
 TestFindTilesMultiple:
@@ -143,16 +187,16 @@ TestFindTilesMultiple:
     expectA #12, "tiles[tileIndex1].x"
     lda tiles+Tile::ypos, x
     expectA #0, "tiles[tileIndex1].y"
-    lda tiles+Tile::power, x
-    expectA #0, "tiles[tileIndex1].power"
+    lda tiles+Tile::powers, x
+    expectA #0, "tiles[tileIndex1].powers"
 
     ldx tileIndex3
     lda tiles+Tile::xpos, x
     expectA #12, "tiles[tileIndex1].x"
     lda tiles+Tile::ypos, x
     expectA #8, "tiles[tileIndex1].y"
-    lda tiles+Tile::power, x
-    expectA #1, "tiles[tileIndex1].power"
+    lda tiles+Tile::powers, x
+    expectA #1, "tiles[tileIndex1].powers"
 
     rts
 
@@ -182,16 +226,16 @@ TestFindTilesOrderReversed:
     expectA #12, "tiles[tileIndex4].x"
     lda tiles+Tile::ypos, x
     expectA #0, "tiles[tileIndex4].y"
-    lda tiles+Tile::power, x
-    expectA #0, "tiles[tileIndex4].power"
+    lda tiles+Tile::powers, x
+    expectA #0, "tiles[tileIndex4].powers"
 
     ldx tileIndex2
     lda tiles+Tile::xpos, x
     expectA #12, "tiles[tileIndex2].x"
     lda tiles+Tile::ypos, x
     expectA #8, "tiles[tileIndex2].y"
-    lda tiles+Tile::power, x
-    expectA #1, "tiles[tileIndex2].power"
+    lda tiles+Tile::powers, x
+    expectA #1, "tiles[tileIndex2].powers"
 
     rts
 
@@ -227,16 +271,16 @@ TestFindTilesIgnoreIntermediatePositions:
     expectA #0, "tiles[tileIndex4].x"
     lda tiles+Tile::ypos, x
     expectA #4, "tiles[tileIndex4].y"
-    lda tiles+Tile::power, x
-    expectA #0, "tiles[tileIndex4].power"
+    lda tiles+Tile::powers, x
+    expectA #0, "tiles[tileIndex4].powers"
 
     ldx tileIndex4
     lda tiles+Tile::xpos, x
     expectA #12, "tiles[tileIndex2].x"
     lda tiles+Tile::ypos, x
     expectA #4, "tiles[tileIndex2].y"
-    lda tiles+Tile::power, x
-    expectA #4, "tiles[tileIndex2].power"
+    lda tiles+Tile::powers, x
+    expectA #4, "tiles[tileIndex2].powers"
 
     rts
 
@@ -304,8 +348,8 @@ DumpNextTile:
     printf "Tile %0d xpos = %d", tempY, tempA
     lda tiles+Tile::ypos, x
     printf "Tile %0d ypos = %d", tempY, tempA
-    lda tiles+Tile::power, x
-    printf "Tile %0d power = %d", tempY, tempA
+    lda tiles+Tile::powers, x
+    printf "Tile %0d powers = $%02x", tempY, tempA
     lda tiles+Tile::velocity, x
     printf "Tile %0d velocity = %d", tempY, tempA
     printf ""
@@ -321,4 +365,287 @@ DumpNextTile:
     printf "tileIndex2 = %d", tileIndex2
     printf "tileIndex3 = %d", tileIndex3
     printf "tileIndex4 = %d", tileIndex4
+    rts
+
+TestSetTileDisappears:
+    setTestName TestSetTileDisappears
+    jsr WipeTiles
+    setTile #7, #0, #0, #3
+
+    ldx #(.sizeof(Tile) * 7)
+    jsr SetTileDisappears
+
+    ldx #(.sizeof(Tile) * 7)
+    lda tiles + Tile::powers, X
+    expectA #$F3, "Updated tile powers"
+    rts
+
+TestSetTilePowerConstant:
+    setTestName TestSetTilePowerConstant
+    jsr WipeTiles
+    setTile #7, #0, #0, #3
+
+    ldx #(.sizeof(Tile) * 7)
+    jsr SetTilePowerConstant
+
+    ldx #(.sizeof(Tile) * 7)
+    lda tiles + Tile::powers, X
+    expectA #$33, "Updated tile powers"
+    rts
+
+TestSetTilePowerIncrease:
+    setTestName TestSetTilePowerIncrease
+    jsr WipeTiles
+    setTile #7, #0, #0, #3
+
+    ldx #(.sizeof(Tile) * 7)
+    jsr SetTilePowerIncrease
+
+    ldx #(.sizeof(Tile) * 7)
+    lda tiles + Tile::powers, X
+    expectA #$43, "Updated tile powers"
+    rts
+
+TestCalculateTileTransitionsEmpty:
+    setTestName TestCalculateTileTransitionsEmpty
+    jsr WipeTiles
+    setTileIndexSlot tileIndex1, $FF
+    setTileIndexSlot tileIndex2, $FF
+    setTileIndexSlot tileIndex3, $FF
+    setTileIndexSlot tileIndex4, $FF
+    jsr CalculateTileTransitions
+    expectByte tileIndex1, #$FF, "Tile index 1"
+    expectByte tileIndex2, #$FF, "Tile index 2"
+    expectByte tileIndex3, #$FF, "Tile index 3"
+    expectByte tileIndex4, #$FF, "Tile index 4"
+    rts
+
+TestCalculateTileTransitionsSingleFirstTile:
+    setTestName TestCalculateTileTransitionsSingleFirstTile
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, 0
+    setTileIndexSlot tileIndex2, $FF
+    setTileIndexSlot tileIndex3, $FF
+    setTileIndexSlot tileIndex4, $FF
+    setTile #0, #4, #8, #1
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex1, #$11, #0
+    rts
+
+TestCalculateTileTransitionsSingleSlidingTile:
+    setTestName TestCalculateTileTransitionsSingleSlidingTile
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, $FF
+    setTileIndexSlot tileIndex2, 0
+    setTileIndexSlot tileIndex3, $FF
+    setTileIndexSlot tileIndex4, $FF
+    setTile #0, #4, #8, #1
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex2, #$11, #1
+
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, $FF
+    setTileIndexSlot tileIndex2, $FF
+    setTileIndexSlot tileIndex3, 0
+    setTileIndexSlot tileIndex4, $FF
+    setTile #0, #4, #8, #1
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex3, #$11, #2
+
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, $FF
+    setTileIndexSlot tileIndex2, $FF
+    setTileIndexSlot tileIndex3, $FF
+    setTileIndexSlot tileIndex4, 0
+    setTile #0, #4, #8, #1
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex4, #$11, #3
+    rts
+
+TestCalculateTileTransitionsMultipleSlidingTilesSync:
+    setTestName TestCalculateTileTransitionsMultipleSlidingTilesSync
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, $FF
+    setTileIndexSlot tileIndex2, 0
+    setTileIndexSlot tileIndex3, 1
+    setTileIndexSlot tileIndex4, 2
+    setTile #0, #4, #8, #1
+    setTile #1, #8, #8, #2
+    setTile #2, #12, #8, #3
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex2, #$11, #1
+    checkTileTransition tileIndex3, #$22, #1
+    checkTileTransition tileIndex4, #$33, #1
+    rts
+
+TestCalculateTileTransitionsMultipleSlidingTilesGap:
+    setTestName TestCalculateTileTransitionsMultipleSlidingTilesGap
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, $FF
+    setTileIndexSlot tileIndex2, 1
+    setTileIndexSlot tileIndex3, $FF
+    setTileIndexSlot tileIndex4, 3
+    setTile #1, #8, #8, #1
+    setTile #3, #12, #8, #2
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex2, #$11, #1
+    checkTileTransition tileIndex4, #$22, #2
+
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, 1
+    setTileIndexSlot tileIndex2, $FF
+    setTileIndexSlot tileIndex3, $FF
+    setTileIndexSlot tileIndex4, 3
+    setTile #1, #8, #8, #1
+    setTile #3, #12, #8, #2
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex1, #$11, #0
+    checkTileTransition tileIndex4, #$22, #2
+    rts
+
+TestCalculateTileTransitionsFullSlateNoMerge:
+    setTestName TestCalculateTileTransitionsFullSlateNoMerge
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, 0
+    setTileIndexSlot tileIndex2, 1
+    setTileIndexSlot tileIndex3, 2
+    setTileIndexSlot tileIndex4, 3
+    setTile #0, #4, #8, #1
+    setTile #1, #8, #8, #2
+    setTile #2, #12, #8, #1
+    setTile #3, #12, #8, #2
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex1, #$11, #0
+    checkTileTransition tileIndex2, #$22, #0
+    checkTileTransition tileIndex3, #$11, #0
+    checkTileTransition tileIndex4, #$22, #0
+    rts
+
+TestCalculateTileTransitionsSimpleMerge:
+    setTestName TestCalculateTileTransitionsSimpleMerge
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, 0
+    setTileIndexSlot tileIndex2, 1
+    setTileIndexSlot tileIndex3, $FF
+    setTileIndexSlot tileIndex4, $FF
+    setTile #0, #4, #8, #1
+    setTile #1, #8, #8, #1
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex1, #$F1, #0
+    checkTileTransition tileIndex2, #$21, #1
+    rts
+
+TestCalculateTileTransitionsSlidingMerge:
+    setTestName TestCalculateTileTransitionsSlidingMerge
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, $FF
+    setTileIndexSlot tileIndex2, 0
+    setTileIndexSlot tileIndex3, 1
+    setTileIndexSlot tileIndex4, $FF
+    setTile #0, #4, #8, #1
+    setTile #1, #8, #8, #1
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex2, #$F1, #1
+    checkTileTransition tileIndex3, #$21, #2
+    rts
+
+TestCalculateTileTransitionsGapMerge:
+    setTestName TestCalculateTileTransitionsGapMerge
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, $FF
+    setTileIndexSlot tileIndex2, 0
+    setTileIndexSlot tileIndex3, $FF
+    setTileIndexSlot tileIndex4, 1
+    setTile #0, #4, #8, #1
+    setTile #1, #8, #8, #1
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex2, #$F1, #1
+    checkTileTransition tileIndex4, #$21, #3
+    rts
+
+TestCalculateTileTransitionsDoubleMerge:
+    setTestName TestCalculateTileTransitionsDoubleMerge
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, 0
+    setTileIndexSlot tileIndex2, 1
+    setTileIndexSlot tileIndex3, 2
+    setTileIndexSlot tileIndex4, 3
+    setTile #0, #4, #8, #1
+    setTile #1, #8, #8, #1
+    setTile #2, #8, #8, #2
+    setTile #3, #8, #8, #2
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex1, #$F1, #0
+    checkTileTransition tileIndex2, #$21, #1
+    checkTileTransition tileIndex3, #$F2, #1
+    checkTileTransition tileIndex4, #$32, #2
+    rts
+
+TestCalculateTileTransitionsMiddleMerge:
+    setTestName TestCalculateTileTransitionsMiddleMerge
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, 0
+    setTileIndexSlot tileIndex2, 1
+    setTileIndexSlot tileIndex3, 2
+    setTileIndexSlot tileIndex4, 3
+    setTile #0, #4, #8, #1
+    setTile #1, #8, #8, #2
+    setTile #2, #8, #8, #2
+    setTile #3, #8, #8, #3
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex1, #$11, #0
+    checkTileTransition tileIndex2, #$F2, #0
+    checkTileTransition tileIndex3, #$32, #1
+    checkTileTransition tileIndex4, #$33, #1
+    rts
+
+TestCalculateTileTransitionsMegaMerge:
+    setTestName TestCalculateTileTransitionsMegaMerge
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, 0
+    setTileIndexSlot tileIndex2, 1
+    setTileIndexSlot tileIndex3, 2
+    setTileIndexSlot tileIndex4, 3
+    setTile #0, #4, #8, #1
+    setTile #1, #8, #8, #1
+    setTile #2, #8, #8, #1
+    setTile #3, #8, #8, #1
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex1, #$F1, #0
+    checkTileTransition tileIndex2, #$21, #1
+    checkTileTransition tileIndex3, #$F1, #1
+    checkTileTransition tileIndex4, #$21, #2
+    rts
+
+TestCalculateTileTransitionsMergeAndSlide:
+    setTestName TestCalculateTileTransitionsMergeAndSlide
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTileIndexSlot tileIndex1, 0
+    setTileIndexSlot tileIndex2, 1
+    setTileIndexSlot tileIndex3, 2
+    setTileIndexSlot tileIndex4, 3
+    setTile #0, #4, #8, #1
+    setTile #1, #8, #8, #1
+    setTile #2, #8, #8, #2
+    setTile #3, #8, #8, #1
+    jsr CalculateTileTransitions
+    checkTileTransition tileIndex1, #$F1, #0
+    checkTileTransition tileIndex2, #$21, #1
+    checkTileTransition tileIndex3, #$22, #1
+    checkTileTransition tileIndex4, #$11, #1
     rts

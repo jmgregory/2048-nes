@@ -156,6 +156,7 @@ NextChar:
     jmp NextChar
 Done:
     jsr PopStack
+    printf "Running tests from file %s", #str
 .endmacro
 
 .macro setTestName name
@@ -172,6 +173,7 @@ NextChar:
     jmp NextChar
 Done:
     jsr PopStack
+    printf "  - Running test %s", #str
 .endmacro
 
 .macro expectA value, string
