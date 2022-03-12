@@ -1,7 +1,7 @@
-default: 2048.nes
+default: 2048.nes 2048.nes.ram.nl
 
 .PHONY: run
-run: 2048.nes
+run: 2048.nes 2048.nes.ram.nl
 	fceux 2048.nes
 
 OBJS := 2048.o \
@@ -24,7 +24,7 @@ obj/2048.o: data/2048.chr data/board-background.nam
 
 .PHONY: clean
 clean:
-	-rm -rf obj 2048.nes 2048.nes.db test/*.o test/*.prg
+	-rm -rf obj 2048.nes 2048.nes.db test/*.o test/*.prg *.nl
 
 .PHONY: test
 test: test/test-board.prg
@@ -38,3 +38,6 @@ test/test-board.prg: test/board.o test/defs.o
 
 test/%.o: src/%.s test/helpers.s
 	ca65 -o $@ $< --target sim6502 -D TEST
+
+2048.nes.ram.nl: 2048.nes fceux_symbols.py
+	python3 fceux_symbols.py
