@@ -7,7 +7,7 @@ frameCounter: .res 1
 
 .import PaintAttributeBufferRow
 .import WipeBoardRow, WipeSpriteBuffer, WipeSpriteRow
-.import WipeTiles, IterateTileRowSlide, CalculateTileTransitions, ResetTileVelocities, FindTileRow
+.import WipeTiles, IterateTileRowSlide, CalculateTileTransitions, ResetTileVelocities, FindTileRow, UpdateTilePowers
 .import DrawBoardRow
 .import ReadJoy
 .importzp blitSource, blitMode, nmiDone
@@ -119,6 +119,7 @@ MainLoop:
     lda #$FF
     sta frameCounter
     jsr ResetTileVelocities
+    jsr UpdateTilePowers
 :
 
 WaitLoop:

@@ -512,6 +512,37 @@ ResetTileVelocities:
 @Done:
     rts
 
+; Copy the new tile power (high nibble) into the current tile power slot (low nibble)
+.export UpdateTilePowers
+UpdateTilePowers:
+    ldx #0
+@NextTile:
+    lda tiles + Tile::powers, X
+    and #$F0
+    cmp #$F0
+    bne @RegularTile
+@DisappearingTile:
+    lda #$FF
+    sta tiles + Tile::powers, X
+    sta tiles + Tile::xpos, X
+    sta tiles + Tile::ypos, X
+    jmp @FinishedUpdate
+@RegularTile:
+    lsr
+    lsr
+    lsr
+    lsr
+    sta tiles + Tile::powers, X
+@FinishedUpdate:
+    .repeat .sizeof(Tile)
+        inx
+    .endrepeat
+    cpx #.sizeof(tiles)
+    bcs @Done
+    jmp @NextTile
+@Done:
+    rts
+
 .ifdef TEST
 .export SetTileDisappears, SetTilePowerConstant, SetTilePowerIncrease
 .export CalculateTileTransitions, IterateTileSlide
