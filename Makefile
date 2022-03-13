@@ -7,6 +7,7 @@ run: 2048.nes 2048.nes.ram.nl
 OBJS := 2048.o \
 		blit.o \
 		board.o \
+		controller.o \
 		drawing.o \
 		header.o \
 		nmi.o \

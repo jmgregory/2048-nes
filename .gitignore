@@ -6,3 +6,4 @@
 obj/
 *.prg
 *.nl
+.DS_Store

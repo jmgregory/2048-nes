@@ -19,6 +19,15 @@ ATTR_BUFFER   = $0500   ; Staging area for board attribute table
 BOARD_LEFT_X  = 4       ; X coordinate of board left edge in nametable space (must multiple of 4 for attributes to map properly)
 BOARD_TOP_Y   = 8       ; Y coordinate of board top edge in nametable space (must multiple of 4 for attributes to map properly)
 
+BUTTON_A      = 1 << 7
+BUTTON_B      = 1 << 6
+BUTTON_SELECT = 1 << 5
+BUTTON_START  = 1 << 4
+BUTTON_UP     = 1 << 3
+BUTTON_DOWN   = 1 << 2
+BUTTON_LEFT   = 1 << 1
+BUTTON_RIGHT  = 1 << 0
+
 .enum
     BLIT_NONE
     BLIT_HORIZONTAL

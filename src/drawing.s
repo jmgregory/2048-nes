@@ -1,6 +1,8 @@
 .include "defs.s"
 
 .import TileDefinitions, TileColorLookups, PaletteData, BackgroundPatternTable
+.import GetTilePosOnNonSlideAxis
+.importzp tileRow, slideDir
 
 .struct TileDef
     patternStart    .byte   ; Index into the first CHR table for the tile (ignoring color)
@@ -23,37 +25,149 @@ spriteIndex:    .res 1  ; Next empty index in the SPRITE_BUFFER
 spriteX:        .res 1  ; Used in tile sprite drawing
 spriteY:        .res 1  ; Used in tile sprite drawing
 spriteCHRIndex: .res 1  ; Used in tile sprite drawing
+spriteMin:      .res 1  ; Used in sprite filtering
+spriteMax:      .res 1  ; Used in sprite filtering
 
 .segment "CODE"
 
-.export WipeBoardBuffer
-WipeBoardBuffer:
-    ldx #0
-    ldy #0
-@WipeBoardRow:
+.importzp tileRow
+.export WipeBoardRow
+WipeBoardRow:
+    lda slideDir
+    cmp #DIR_UP
+    beq @WipeVertical
+    cmp #DIR_DOWN
+    beq @WipeVertical
+@WipeHorizontal:
+    lda tileRow
+    asl
+    asl
+    asl
+    asl
+    asl
+    asl
+    tay
+    asl
+    tax
+@CopyNextH:
+    lda tileRow
+    lsr
+    cmp #1
+    beq :+
     lda BackgroundPatternTable + (BOARD_TOP_Y * 32) + BOARD_LEFT_X, X
-    sta BOARD_BUFFER, y
-    sta BOARD_BUFFER + 64, y
-    sta BOARD_BUFFER + 128, y
-    sta BOARD_BUFFER + 192, y
+    jmp :++
+:
+    lda BackgroundPatternTable + (BOARD_TOP_Y * 32) + 256 + BOARD_LEFT_X, X
+:
+    sta BOARD_BUFFER, Y
+    lda #0
+    sta COLOR_BUFFER, Y
     inx
     iny
-    txa
+    tya
     and #$0F
-    bne @WipeBoardRow
+    bne @CopyNextH
+    tya
+    and #%00111111
+    beq @Done
     txa
     clc
     adc #16
-    bcs :+
     tax
-    jmp @WipeBoardRow
-:
-    ldx #0
+    jmp @CopyNextH
+@WipeVertical:
+    lda tileRow
+    asl
+    asl
+    tay
+    tax
+@CopyNextV:
+    lda BackgroundPatternTable + (BOARD_TOP_Y * 32) + BOARD_LEFT_X, X
+    sta BOARD_BUFFER, Y
+    sta BOARD_BUFFER + 64, Y
+    sta BOARD_BUFFER + 128, Y
+    sta BOARD_BUFFER + 192, Y
     lda #0
-:
-    sta COLOR_BUFFER, X
+    sta COLOR_BUFFER, Y
+    sta COLOR_BUFFER + 64, Y
+    sta COLOR_BUFFER + 128, Y
+    sta COLOR_BUFFER + 192, Y
     inx
-    bne :-
+    iny
+    tya
+    and #$03
+    bne @CopyNextV
+    tya
+    clc
+    adc #12
+    tay
+    txa
+    clc
+    adc #28
+    cmp #128
+    bcs @Done
+    tax
+    jmp @CopyNextV
+@Done:
+    rts
+
+.export WipeSpriteRow
+WipeSpriteRow:
+    ldy #0
+    lda slideDir
+    cmp #DIR_LEFT
+    beq @HorizontalMode
+    cmp #DIR_RIGHT
+    beq @HorizontalMode
+@VerticalMode:
+    ldx #3  ; Fourth byte of sprite is X-pos, which is what we want to filter on for vertical mode
+    lda tileRow
+    asl
+    asl
+    clc
+    adc #BOARD_LEFT_X
+    asl
+    asl
+    asl
+    sta spriteMin
+    adc #32
+    sta spriteMax
+    jmp @ContinueWipe
+@HorizontalMode:
+    ldx #0  ; First byte of sprite is Y-pos, which is what we want for horizontal mode
+    lda tileRow
+    asl
+    asl
+    clc
+    adc #BOARD_TOP_Y
+    asl
+    asl
+    asl
+    sta spriteMin
+    adc #32
+    sta spriteMax
+@ContinueWipe:
+    lda SPRITE_BUFFER, x
+    cmp spriteMin
+    bcc @NextSprite
+    cmp spriteMax
+    bcs @NextSprite
+    lda #$FF
+    sta SPRITE_BUFFER, y
+    sta SPRITE_BUFFER + 1, y
+    sta SPRITE_BUFFER + 2, y
+    sta SPRITE_BUFFER + 3, y
+@NextSprite:
+    .repeat 4
+        iny
+    .endrepeat
+    txa
+    clc
+    adc #4
+    bcs @Done
+    tax
+    jmp @ContinueWipe
+@Done:
     rts
 
 .export WipeSpriteBuffer
@@ -66,6 +180,48 @@ WipeSpriteBuffer:
     inx
     bne :-
     rts
+
+; DrawBoardRow
+; Draws all the tiles (if any) from a given row or column onto BOARD_BUFFER.
+;
+; Params:
+; tileRow - Which row or column to draw (0-3)
+; slideDir - Determines whether to draw based on columns or rows
+.export DrawBoardRow
+.importzp tileRow
+.importzp tiles
+DrawBoardRow:
+    ldx #0
+@NextTile:
+    lda tiles + Tile::powers, X
+    and #$0F
+    sta tilePower
+    cmp #$0F
+    beq @IncTile
+    jsr GetTilePosOnNonSlideAxis
+    lsr
+    lsr
+    cmp tileRow
+    bne @IncTile
+    lda tiles + Tile::xpos, X
+    sta tileDrawX
+    lda tiles + Tile::ypos, X
+    sta tileDrawY
+    txa
+    pha
+    jsr DrawTile
+    pla
+    tax
+@IncTile:
+    .repeat .sizeof(Tile)
+        inx
+    .endrepeat
+    cpx #(17 * .sizeof(Tile))
+    bcs @Done
+    jmp @NextTile
+@Done:
+    rts
+    
 
 ; Draws a tile on BOARD_BUFFER
 ; tileDrawX and tileDrawY specify coordinates where to place the tile's top-left corner
@@ -385,11 +541,45 @@ WriteTileSpriteBytes:
     stx spriteIndex
     rts
 
-.export PaintAttributeBuffer
-PaintAttributeBuffer:
+.export PaintAttributeBufferRow
+PaintAttributeBufferRow:
     ldx #$00
     stx attrIndex
 BeginPaintQuadrant:
+    ; Do we need to be looking at this block?
+    ldy slideDir
+    cpy #DIR_DOWN
+    beq :+
+    cpy #DIR_UP
+    beq :+
+    ; horizontal
+    lda tileRow
+    and #$03
+    asl
+    asl
+    eor attrIndex
+    and #%00001100
+    beq @ContinuePaint
+    inc attrIndex
+    inx
+    inx
+    inx
+    inx
+    jmp @FinishedAttributeBlock
+:
+    ; vertical
+    lda tileRow
+    and #$03
+    eor attrIndex
+    and #$03
+    beq @ContinuePaint
+    inc attrIndex
+    inx
+    inx
+    inx
+    inx
+    jmp @FinishedAttributeBlock
+@ContinuePaint:
     ; top left
     lda COLOR_BUFFER, X
     asl A
@@ -414,7 +604,6 @@ BeginPaintQuadrant:
     lsr A
     lsr A
     ldy attrIndex
-    ora ATTR_BUFFER, Y
     sta ATTR_BUFFER, Y
     jsr IncrementBoardBufferColors
     ; top right
@@ -500,7 +689,7 @@ BeginPaintQuadrant:
     sec
     sbc #$20
     tax
-
+@FinishedAttributeBlock:
     ;Check if we're done
     lda attrIndex
     cmp #$10
@@ -522,60 +711,77 @@ DonePaletteMap:
 COLOR_BUMP_INCREMENT = $50  ; $10 is one row in the CHR table
 
 IncrementBoardBufferColors:
+    ; Can we skip entirely (colorLookup == 0)?
+    lda colorLookup
+    and #$03
+    bne :+
+    rts
+:
     ; Stash X and Y
     txa
     pha
     tya
     pha
+@TopLeft:
     ; X to top-left corner
     dex
     dex
     ; Get CHR increment factor
     lda colorLookup
-    beq @Done
     and #$02
-    bne :+
-    inx
-    jmp @TopRight
-:
+    beq @TopRight
     ; Add to existing CHR index
     lda BOARD_BUFFER, X
     clc
     adc #COLOR_BUMP_INCREMENT
     sta BOARD_BUFFER, X
-    ; Move down a row in the board buffer
-    txa
-    clc
-    adc #$10
-    tax
-    ; Add to this CHR index, too
-    lda BOARD_BUFFER, X
-    clc
-    adc #COLOR_BUMP_INCREMENT
-    sta BOARD_BUFFER, X
-    ; Move X to top-right corner
-    txa
-    sec
-    sbc #$0F
-    tax
 @TopRight:
+    inx
     ; Get CHR increment factor
     lda colorLookup
-    and #$01
-    bne :+
-    jmp @Done
+    ldy slideDir
+    cpy #DIR_LEFT
+    beq :+
+    cpy #DIR_RIGHT
+    beq :+
+    and #$02
+    jmp :++
 :
+    and #$01
+:
+    beq @BottomLeft
     ; Add to existing CHR index
     lda BOARD_BUFFER, X
     clc
     adc #COLOR_BUMP_INCREMENT
     sta BOARD_BUFFER, X
+@BottomLeft:
     ; Move down a row in the board buffer
     txa
     clc
-    adc #$10
+    adc #$0F
     tax
-    ; Add to this CHR index, too
+    lda colorLookup
+    ldy slideDir
+    cpy #DIR_LEFT
+    beq :+
+    cpy #DIR_RIGHT
+    beq :+
+    and #$01
+    jmp :++
+:
+    and #$02
+:
+    beq @BottomRight
+    lda BOARD_BUFFER, X
+    clc
+    adc #COLOR_BUMP_INCREMENT
+    sta BOARD_BUFFER, X
+@BottomRight:
+    inx
+    lda colorLookup
+    and #$01
+    beq @Done
     lda BOARD_BUFFER, X
     clc
     adc #COLOR_BUMP_INCREMENT

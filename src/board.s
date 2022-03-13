@@ -10,16 +10,28 @@ tileIndex4: .res 1
 tileRow: .res 1
 slideDir: .res 1        ; See DIR_* enums in defs.s
 currentPower: .res 1    ; temp var used by CalculateTileTransitions
-.export tiles, slideDir
+.export tiles, slideDir, tileRow
 
 .segment "CODE"
 
+; WipeTiles
+; Clears all the tiles on the board by setting their power to $F
+WipeTiles:
+    lda #$FF
+    ldx #0
+:
+    sta tiles, X
+    inx
+    cpx #(17 * .sizeof(Tile))
+    bne :-
+    rts
+
 ; CalculateTileTransitions
 ; Calculates the slide velocities and resulting powers for the four tiles
-; indexed by tileIndex1-4.  Velocities are in board-space units (A velocity of
+; indexed by tileIndex[1-4].  Velocities are in board-space units (A velocity of
 ; -1 will move 1 full tile to the left after 4 frames).  If the tile is
 ; disappearing because another tile will merge into it, its new power is set to
-; $FF.
+; $F.
 ;
 ; Params:
 ; tileIndex[1-4] - Indices into the tiles array for up to four tiles in the same
@@ -244,6 +256,8 @@ CalculateTileTransitions:
     jmp @Done
 @Tile4:
     ldx tileIndex4
+    cpx #$FF
+    beq @Done
     tya
     sta tiles + Tile::velocity, X
     jsr SetTilePowerConstant
@@ -305,6 +319,62 @@ SetTileDisappears:
     lda #$F0
     ora tiles + Tile::powers, X
     sta tiles + Tile::powers, X
+    rts
+
+; IterateTileRowSlide
+; Updates the position of all tiles in a given row or column based on their set
+; velocities and slide direction.
+;
+; Params:
+; tileRow - which row or column to update in board space (0-3)
+; slideDir - whether to look based on row or col
+IterateTileRowSlide:
+    ldx #0
+@NextTile:
+    lda tiles + Tile::powers, X
+    and #$0F
+    cmp #$0F
+    beq @IncTile
+    jsr GetTilePosOnNonSlideAxis
+    lsr
+    lsr
+    cmp tileRow
+    bne @IncTile
+    jsr IterateTileSlide
+@IncTile:
+    .repeat .sizeof(Tile)
+        inx
+    .endrepeat
+    cpx #.sizeof(tiles)
+    bcs @Done
+    jmp @NextTile
+@Done:
+    rts
+
+; IterateTileSlide
+; Updates the position of a tile based on its velocity and the current slide
+; direction. 
+;
+; Params:
+; X - Index into tiles array
+; slideDir - Determines whether to slide along the X or Y axis
+IterateTileSlide:
+    lda slideDir
+    cmp #DIR_UP
+    beq @IterateVertical
+    cmp #DIR_DOWN
+    beq @IterateVertical
+@IterateHorizontal:
+    lda tiles + Tile::xpos, X
+    clc
+    adc tiles + Tile::velocity, X
+    sta tiles + Tile::xpos, X
+    rts
+@IterateVertical:
+    lda tiles + Tile::ypos, X
+    clc
+    adc tiles + Tile::velocity, X
+    sta tiles + Tile::ypos, X
     rts
 
 ; FindTileRow
@@ -428,9 +498,26 @@ GetTilePosOnNonSlideAxis:
 :
     rts
 
+ResetTileVelocities:
+    ldx #0
+    lda #0
+@NextTile:
+    sta tiles + Tile::velocity, X
+    .repeat .sizeof(Tile)
+        inx
+    .endrepeat
+    cpx #.sizeof(tiles)
+    bcs @Done
+    jmp @NextTile
+@Done:
+    rts
+
 .ifdef TEST
-.export FindTileRow, GetTilePosOnNonSlideAxis, GetTilePosOnSlideAxis
 .export SetTileDisappears, SetTilePowerConstant, SetTilePowerIncrease
-.export CalculateTileTransitions
-.exportzp tileRow, tileIndex1, tileIndex2, tileIndex3, tileIndex4
+.export CalculateTileTransitions, IterateTileSlide
+.exportzp tileIndex1, tileIndex2, tileIndex3, tileIndex4
 .endif
+
+.export WipeTiles
+.export GetTilePosOnNonSlideAxis, GetTilePosOnSlideAxis
+.export FindTileRow, CalculateTileTransitions, IterateTileRowSlide, ResetTileVelocities
