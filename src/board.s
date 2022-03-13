@@ -11,6 +11,14 @@ tileRow: .res 1
 slideDir: .res 1        ; See DIR_* enums in defs.s
 currentPower: .res 1    ; temp var used by CalculateTileTransitions
 .export tiles, slideDir, tileRow
+.exportzp tileIndex1, tileIndex2, tileIndex3, tileIndex4
+
+; Used by AddTile routine (and also DrawTile)
+tileX:          .res 1  ; X coordinate in board space where to add/draw the tile (top left corner)
+tileY:          .res 1  ; Y coordinate in board space where to add/draw the tile (top left corner)
+tilePower:      .res 1  ; Which number tile to draw (0=>1, 1=>2, 2=>4, 3=>8, etc.)
+tileVelocity:   .res 1  ; Velocity of new tile to be added
+.export tileX, tileY, tilePower, tileVelocity
 
 .segment "CODE"
 
@@ -543,10 +551,61 @@ UpdateTilePowers:
 @Done:
     rts
 
+; GetEmptyTileIndex
+; Finds the first unused tile slot in the `tiles` array and sets the X register
+; to that index.  If all the tile slots are occupied, sets X to $FF.
+GetEmptyTileIndex:
+    ldx #0
+@NextTile:
+    lda tiles + Tile::powers, X
+    cmp #$FF
+    bne @NotEmpty
+    rts
+@NotEmpty:
+    .repeat .sizeof(Tile)
+        inx
+    .endrepeat
+    cpx #.sizeof(tiles)
+    bcs @NoneFound
+    jmp @NextTile
+@NoneFound:
+    ldx #$FF
+    rts
+
+; AddTile
+; Adds the specified tile to the board in the first empty slot.  If all slots in
+; `tiles` are full, does nothing.
+;
+; Params:
+; tileX - the X position of the new tile, in board space (top left corner)
+; tileY - the Y position of the new tile, in board space (top left corner)
+; tilePower - the power of the new tile (0 => 1, 1 => 2, 2 => 4, etc.)
+; tileVelocity - the velocity of the new tile
+.export AddTile
+AddTile:
+    jsr GetEmptyTileIndex
+    cpx #$FF
+    bne :+
+    rts
+:
+    lda tileX
+    sta tiles + Tile::xpos, x
+    lda tileY
+    sta tiles + Tile::ypos, x
+    lda tileVelocity
+    sta tiles + Tile::velocity, x
+    lda tilePower
+    asl
+    asl
+    asl
+    asl
+    ora tilePower
+    sta tiles + Tile::powers, x
+    rts
+
 .ifdef TEST
 .export SetTileDisappears, SetTilePowerConstant, SetTilePowerIncrease
 .export CalculateTileTransitions, IterateTileSlide
-.exportzp tileIndex1, tileIndex2, tileIndex3, tileIndex4
 .endif
 
 .export WipeTiles

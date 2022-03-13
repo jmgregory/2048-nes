@@ -1,4 +1,4 @@
-.importzp tileDrawX, tileDrawY, tilePower
+.importzp tileX, tileY, tilePower
 .import DrawTile, PaintAttributeBuffer
 
 .segment "CODE"
@@ -7,22 +7,22 @@
 TestDrawTileShapes:
     lda #$00
     sta tilePower
-    sta tileDrawX
-    sta tileDrawY
+    sta tileX
+    sta tileY
     jsr DrawTile
 @NextTile:
-    lda tileDrawX
+    lda tileX
     clc
     adc #$04
     cmp #$10
     bcc :+
-    lda tileDrawY
+    lda tileY
     clc
     adc #$04
-    sta tileDrawY
+    sta tileY
     lda #$00
 :
-    sta tileDrawX
+    sta tileX
     lda tilePower
     clc
     adc #$01
@@ -38,75 +38,75 @@ TestDrawEdgeTiles:
     lda #1
     sta tilePower
     lda #0
-    sta tileDrawX
+    sta tileX
     lda #$FD
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     lda #4
-    sta tileDrawX
+    sta tileX
     lda #$FE
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     lda #8
-    sta tileDrawX
+    sta tileX
     lda #$FF
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     lda #15
-    sta tileDrawX
+    sta tileX
     lda #0
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     lda #14
-    sta tileDrawX
+    sta tileX
     lda #4
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     lda #13
-    sta tileDrawX
+    sta tileX
     lda #8
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     lda #12
-    sta tileDrawX
+    sta tileX
     lda #15
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     lda #8
-    sta tileDrawX
+    sta tileX
     lda #14
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     lda #4
-    sta tileDrawX
+    sta tileX
     lda #13
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     lda #$FD
-    sta tileDrawX
+    sta tileX
     lda #12
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     lda #$FE
-    sta tileDrawX
+    sta tileX
     lda #8
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     lda #$FF
-    sta tileDrawX
+    sta tileX
     lda #4
-    sta tileDrawY
+    sta tileY
     jsr DrawTile
 
     rts
@@ -115,59 +115,59 @@ TestDrawEdgeTiles:
 TestColorMix1:
     lda #0
     sta tilePower
-    sta tileDrawX
-    sta tileDrawY
+    sta tileX
+    sta tileY
     jsr DrawTile
     inc tilePower
-    inc tileDrawX
+    inc tileX
     jsr DrawTile
     inc tilePower
-    inc tileDrawX
+    inc tileX
     jsr DrawTile
     inc tilePower
-    inc tileDrawX
+    inc tileX
     jsr DrawTile
 
     lda #0
-    sta tileDrawX
+    sta tileX
     lda #4
-    sta tileDrawY
+    sta tileY
     inc tilePower
     jsr DrawTile
     inc tilePower
-    inc tileDrawX
+    inc tileX
     jsr DrawTile
     inc tilePower
-    inc tileDrawX
+    inc tileX
     jsr DrawTile
     inc tilePower
-    inc tileDrawX
+    inc tileX
     jsr DrawTile
 
     lda #0
-    sta tileDrawX
+    sta tileX
     lda #8
-    sta tileDrawY
+    sta tileY
     inc tilePower
     jsr DrawTile
     inc tilePower
-    inc tileDrawX
+    inc tileX
     jsr DrawTile
     inc tilePower
-    inc tileDrawX
+    inc tileX
     jsr DrawTile
     inc tilePower
-    inc tileDrawX
+    inc tileX
     jsr DrawTile
 
     lda #0
-    sta tileDrawX
+    sta tileX
     lda #12
-    sta tileDrawY
+    sta tileY
     inc tilePower
     jsr DrawTile
     inc tilePower
-    inc tileDrawX
+    inc tileX
     jsr DrawTile
 
     rts

@@ -11,11 +11,7 @@
 
 .segment "ZEROPAGE"
 
-; Used by DrawTile routine
-tileDrawX:      .res 1  ; X coordinate in board space where to start drawing tile
-tileDrawY:      .res 1  ; Y coordinate in board space where to start drawing tile
-tilePower:      .res 1  ; Which number tile to draw (0=>1, 1=>2, 2=>4, 3=>8, etc.)
-.export tileDrawX, tileDrawY, tilePower
+.import tileX, tileY, tilePower, tileVelocity
 
 tileRowCounter: .res 1  ; Counter used for drawing tiles
 tileColor:      .res 1  ; Internal variable used for drawing tiles
@@ -204,9 +200,9 @@ DrawBoardRow:
     cmp tileRow
     bne @IncTile
     lda tiles + Tile::xpos, X
-    sta tileDrawX
+    sta tileX
     lda tiles + Tile::ypos, X
-    sta tileDrawY
+    sta tileY
     txa
     pha
     jsr DrawTile
@@ -224,17 +220,17 @@ DrawBoardRow:
     
 
 ; Draws a tile on BOARD_BUFFER
-; tileDrawX and tileDrawY specify coordinates where to place the tile's top-left corner
+; tileX and tileY specify coordinates where to place the tile's top-left corner
 ; tilePower indicates which tile to draw (0=>1, 1=>2, 2=>4, etc.)
 .export DrawTile
 DrawTile:
-    lda tileDrawY
+    lda tileY
     asl A
     asl A
     asl A
     asl A
     clc
-    adc tileDrawX
+    adc tileX
     tax             ; X now has starting index in BOARD_BUFFER
     lda tilePower
     asl A
@@ -246,11 +242,13 @@ DrawTile:
     lda #0
     sta tileRowCounter
 DrawTileRow:
-    ; Is this row too high (outside the board?)
-    lda tileDrawY
+    ; Is this row too high or low (outside the board?)
+    lda tileY
     clc
     adc tileRowCounter
-    cmp #$FC
+    cmp #$FD
+    bcc :+
+    cmp #16
     bcc :+
     iny     ; Increment indices as if we drew the row
     iny
@@ -259,8 +257,10 @@ DrawTileRow:
     inx
     jmp TileRowDone
 :
-    lda tileDrawX   ; Is this column outside the board?
+    lda tileX   ; Is this column outside the board?
     cmp #$FD
+    bcs @Col1Done
+    cmp #16
     bcs @Col1Done
     tya
     sta BOARD_BUFFER, X
@@ -269,7 +269,7 @@ DrawTileRow:
 @Col1Done:
     iny
     inx
-    lda tileDrawX   ; Is this column outside the board?
+    lda tileX   ; Is this column outside the board?
     cmp #$FF
     bcs :+
     cmp #15
@@ -281,7 +281,7 @@ DrawTileRow:
     sta COLOR_BUFFER, X
 @Col2Done:
     inx
-    lda tileDrawX   ; Is this column outside the board?
+    lda tileX   ; Is this column outside the board?
     cmp #$FE
     bcs :+
     cmp #14
@@ -294,7 +294,7 @@ DrawTileRow:
 @Col3Done:
     iny
     inx
-    lda tileDrawX
+    lda tileX
     cmp #13         ; Is this column outside the board?
     bpl TileRowDone
     tya
@@ -302,10 +302,10 @@ DrawTileRow:
     lda tileColor
     sta COLOR_BUFFER, X
 TileRowDone:
-    lda tileDrawY
+    lda tileY
     clc
     adc tileRowCounter
-    cmp #15
+    cmp #15     ; If we just drew on the last row of the board, we're done
     bne :+
     jmp TileBGDone
 :
@@ -336,7 +336,7 @@ TileBGDone:
     lda SPRITE_BUFFER, X
     cmp #$FF
     beq @SpriteNoCollision
-    lda tileDrawY
+    lda tileY
     clc
     adc #BOARD_TOP_Y
     asl
@@ -363,7 +363,7 @@ TileBGDone:
     inx     ; Go to sprite X coord byte
     inx
     inx
-    lda tileDrawX
+    lda tileX
     clc
     adc #BOARD_LEFT_X
     asl
@@ -401,12 +401,12 @@ TileBGDone:
     bne @CheckNextSprite
 
 ; Do we even need to draw the sprite?
-    lda tileDrawX
+    lda tileX
     cmp #15
     bpl TileSpriteDone
     cmp #$FE
     bmi TileSpriteDone
-    lda tileDrawY
+    lda tileY
     cmp #15
     bpl TileSpriteDone
     cmp #$FE
@@ -416,10 +416,10 @@ TileBGDone:
 
 TileSpriteTopLeft:
     ; Do we draw this corner?
-    lda tileDrawY
+    lda tileY
     cmp #$FF
     bmi :+
-    lda tileDrawX
+    lda tileX
     cmp #$FF
     bmi TileSpriteTopRight
     jsr WriteTileSpriteBytes
@@ -432,7 +432,7 @@ TileSpriteTopRight:
     ; Increment indices
     inc spriteCHRIndex
     ; Do we draw this corner?
-    lda tileDrawX
+    lda tileX
     cmp #14
     bpl TileSpriteBottomLeft
     lda spriteX
@@ -457,10 +457,10 @@ TileSpriteBottomLeft:
     adc #8
     sta spriteY
     ; Do we draw this corner?
-    lda tileDrawY
+    lda tileY
     cmp #14
     bpl TileSpriteDone
-    lda tileDrawX
+    lda tileX
     cmp #$FF
     bmi TileSpriteBottomRight
     jsr WriteTileSpriteBytes
@@ -473,7 +473,7 @@ TileSpriteBottomRight:
     adc #8
     sta spriteX
     ; Do we draw this corner?
-    lda tileDrawX
+    lda tileX
     cmp #14
     bpl TileSpriteDone
     jsr WriteTileSpriteBytes
@@ -483,7 +483,7 @@ TileSpriteDone:
 
 SetUpTileSpriteVars:
     ; Y coord
-    lda tileDrawY
+    lda tileY
     clc
     adc #BOARD_TOP_Y
     asl A       ; Multiply by 8 scanlines
@@ -493,7 +493,7 @@ SetUpTileSpriteVars:
     adc #7
     sta spriteY
     ; X coord
-    lda tileDrawX
+    lda tileX
     clc
     adc #BOARD_LEFT_X
     asl A
