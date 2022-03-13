@@ -1,9 +1,9 @@
 .include "../src/defs.s"
 .include "helpers.s"
 
-.import FindTileRow, GetTilePosOnNonSlideAxis, GetTilePosOnSlideAxis
+.import WipeTiles, FindTileRow, GetTilePosOnNonSlideAxis, GetTilePosOnSlideAxis
 .import SetTileDisappears, SetTilePowerConstant, SetTilePowerIncrease
-.import CalculateTileTransitions
+.import CalculateTileTransitions, IterateTileSlide, IterateTileRowSlide
 .importzp tileRow, tiles, slideDir, tileIndex1, tileIndex2, tileIndex3, tileIndex4
 
 .segment "STARTUP"
@@ -35,21 +35,41 @@ _main:
     jsr TestCalculateTileTransitionsMiddleMerge
     jsr TestCalculateTileTransitionsMegaMerge
     jsr TestCalculateTileTransitionsMergeAndSlide
+    jsr TestIterateTileSlides
+    jsr TestIterateTileRowSlides
     printf "All tests in '%s' passed!", #testFileName
     lda #0
     jmp exit
 
 .segment "CODE"
-WipeTiles:
-    lda #$FF
-    ldx #0
+
+.macro setTile slot, xp, yp, pow, vel
+    lda #0
+    ldx slot
 :
-    stx tempX
-    sta tiles, X
-    inx
-    cpx #(17 * .sizeof(Tile))
-    bne :-
-    rts
+    cpx #0
+    beq :+
+    dex
+    clc
+    adc #.sizeof(Tile)
+    jmp :-
+:
+    tax
+    lda xp
+    sta tiles+Tile::xpos, x
+    lda yp
+    sta tiles+Tile::ypos, x
+    .ifblank pow
+    .else
+        lda pow
+        sta tiles+Tile::powers, x
+    .endif
+    .ifblank vel
+    .else
+        lda vel
+        sta tiles+Tile::velocity, x
+    .endif
+.endmacro
 
 TestWipeTiles:
     setTestName TestWipeTiles
@@ -87,10 +107,8 @@ TestFindTilesEmpty:
 TestFindTilesSingle:
     setTestName TestFindTiles
     jsr WipeTiles
+    setTile #0, #0, #0, #0
     lda #0
-    sta tiles+Tile::xpos
-    sta tiles+Tile::ypos
-    sta tiles+Tile::powers
     sta tileRow
     lda #DIR_LEFT
     sta slideDir
@@ -114,26 +132,6 @@ TestFindTilesSingle:
     expectA #0, "tiles[tileIndex1].powers"
 
     rts
-
-.macro setTile slot, xp, yp, pow
-    lda #0
-    ldx slot
-:
-    cpx #0
-    beq :+
-    dex
-    clc
-    adc #.sizeof(Tile)
-    jmp :-
-:
-    tax
-    lda xp
-    sta tiles+Tile::xpos, x
-    lda yp
-    sta tiles+Tile::ypos, x
-    lda pow
-    sta tiles+Tile::powers, x
-.endmacro
 
 .macro setTileIndexSlot tileIndex, slot
     .local @SetSlot
@@ -648,4 +646,69 @@ TestCalculateTileTransitionsMergeAndSlide:
     checkTileTransition tileIndex2, #$21, #1
     checkTileTransition tileIndex3, #$22, #1
     checkTileTransition tileIndex4, #$11, #1
+    rts
+
+.macro checkTilePos slot, xp, yp
+    .if (.match (.left (1, {slot}), #))
+        ldx #(.right(.tcount(slot) - 1, slot) * .sizeof(Tile))
+    .else
+        ldx #(slot * .sizeof(Tile))
+    .endif
+    lda tiles + Tile::xpos, X
+    expectA xp, "X position of tile"
+    lda tiles + Tile::ypos, X
+    expectA yp, "Y position of tile"
+.endmacro
+
+TestIterateTileSlides:
+    setTestName TestIterateTileSlides
+    jsr WipeTiles
+
+    setSlideDir DIR_RIGHT
+    setTile #0, #0, #0, #1, #0
+    ldx #0
+    jsr IterateTileSlide
+    checkTilePos #0, #0, #0
+
+    setSlideDir DIR_RIGHT
+    setTile #0, #0, #0, #1, #1
+    ldx #0
+    jsr IterateTileSlide
+    checkTilePos #0, #1, #0
+
+    setSlideDir DIR_LEFT
+    setTile #0, #2, #0, #1, #$FF
+    ldx #0
+    jsr IterateTileSlide
+    checkTilePos #0, #1, #0
+    
+    setSlideDir DIR_UP
+    setTile #0, #2, #2, #1, #$FF
+    ldx #0
+    jsr IterateTileSlide
+    checkTilePos #0, #2, #1
+
+    setSlideDir DIR_DOWN
+    setTile #0, #2, #2, #1, #1
+    ldx #0
+    jsr IterateTileSlide
+    checkTilePos #0, #2, #3
+    
+    rts
+
+TestIterateTileRowSlides:
+    setTestName TestIterateTileRowSlides
+    jsr WipeTiles
+    setSlideDir DIR_RIGHT
+    setTile #0, #0, #0, #1, #2
+    setTile #1, #4, #0, #1, #1
+    setTile #2, #0, #4, #1, #1
+    setTile #3, #0, #8, #1, #3
+    lda #0
+    sta tileRow
+    jsr IterateTileRowSlide
+    checkTilePos #0, #2, #0
+    checkTilePos #1, #5, #0
+    checkTilePos #2, #0, #4
+    checkTilePos #3, #0, #8
     rts
